@@ -21,6 +21,6 @@ class ReconstructionLoss(Module):
         :return: The loss value
         """
 
-        loss = self.cel(output_student, labels) + self.alpha * self.kld(output_teacher, output_student)
+        loss = self.cel(output_student, labels) + self.alpha * self.kld(output_student, output_teacher)
 
         return loss
