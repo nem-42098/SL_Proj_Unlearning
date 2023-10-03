@@ -68,7 +68,7 @@ class Unlearner:
                 loss.backward()
                 optimizer.step()
                 
-                self.log_performance(y_pred, targets, loss.item(), e, i)
+                self.log_performance(y_pred, targets, loss.item(), e, i, phase='retrain' if include_target else 'erasure')
         return student
             
     def reset_weights(self, model: Module) -> Module:
@@ -76,10 +76,10 @@ class Unlearner:
         dumb_model = dumb_model.apply(Unlearner.init_weights)
         return dumb_model.to(self.device)
     
-    def log_performance(self, y_pred:torch.Tensor, target:torch.Tensor, loss:float, epoch:int, batch:int) -> None:
+    def log_performance(self, y_pred:torch.Tensor, target:torch.Tensor, loss:float, epoch:int, batch:int, phase:str) -> None:
         tp = torch.sum(torch.argmax(y_pred,axis=1)==target).item()
         n  = target.size(0)
-        self.log.append((epoch, batch, tp, n, loss))
+        self.log.append((phase, epoch, batch, tp, n, loss))
 
     @staticmethod
     def init_weights(layer: Module) -> None:
