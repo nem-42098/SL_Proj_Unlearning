@@ -23,16 +23,16 @@ class Unlearner:
         print('Erasing information from original model...')
         self.erased_model = self.knowledge_transfer(
             self.og_model, self.dumb_model,
-            nn.KLDivLoss(reduction="batchmean"),
-            forget_set,
+            include_target = False,
+            trainset = forget_set,
             epochs = forget_epochs)
         
         # Retrain erased model on remaning set
         print('Retraining on the retrain set...')
         self.retrained_model = self.knowledge_transfer(
             self.erased_model, self.og_model,
-            ReconstructionLoss(),
-            retain_set,
+            include_target = True,
+            trainset = retain_set,
             epochs = retrain_epochs)
         
         
@@ -40,7 +40,7 @@ class Unlearner:
     
     def knowledge_transfer(self, 
             student: Module, teacher: Module,
-            criterion: Module,
+            include_target: bool,
             trainset: DataLoader, 
             epochs:int = 10) -> Module:
         
@@ -48,6 +48,7 @@ class Unlearner:
         student = deepcopy(student)
         student.train()
         optimizer = torch.optim.Adam(student.parameters(), lr=1e-6)
+        criterion = ReconstructionLoss()
                     
         for e in tqdm(range(epochs)):
             for i,(inputs,targets) in enumerate(trainset):
@@ -60,14 +61,14 @@ class Unlearner:
                     y_teach = teacher(inputs)
 
                 optimizer.zero_grad()
-                if isinstance(criterion, ReconstructionLoss):
+                if include_target:
                     loss = criterion(y_pred, y_teach, targets)  # in case of retraining
                 else:
                     loss = criterion(y_pred, y_teach)           # in case of erasure
                 loss.backward()
                 optimizer.step()
                 
-                self.log_performance(y_pred, targets, loss, e, i)
+                self.log_performance(y_pred, targets, loss.item(), e, i)
         return student
             
     def reset_weights(self, model: Module) -> Module:
