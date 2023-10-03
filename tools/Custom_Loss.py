@@ -1,6 +1,6 @@
 from torch.nn import Module, CrossEntropyLoss, KLDivLoss
 from torch import Tensor
-from torch.nn.functional import softmax
+from torch.nn.functional import softmax, log_softmax
 
 
 class ReconstructionLoss(Module):
@@ -21,7 +21,7 @@ class ReconstructionLoss(Module):
         :param labels: The actual target variable as a torch.Tensor
         :return: The loss value
         """
-        kld_loss = self.kld(softmax(output_student, dim=1), softmax(output_teacher, dim=1))
+        kld_loss = self.kld(log_softmax(output_student, dim=1), softmax(output_teacher, dim=1))
         if labels is None:
             return kld_loss
         
