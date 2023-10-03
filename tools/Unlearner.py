@@ -7,9 +7,11 @@ from torch.utils.data import DataLoader
 from .Custom_Loss import ReconstructionLoss
 
 class Unlearner:
-    def __init__(self, model : Module, device: str = 'cuda'):
+    def __init__(self, model : Module, device: str = 'cuda', lr:float = 1e-6, alpha:float = 1):
         self.og_model = model
         self.device = device
+        self.lr = lr
+        self.alpha = alpha
         self.log = []
         self.dumb_model = None
         self.erased_model = None
@@ -47,12 +49,11 @@ class Unlearner:
         teacher.eval()
         student = deepcopy(student)
         student.train()
-        optimizer = torch.optim.Adam(student.parameters(), lr=1e-6)
-        criterion = ReconstructionLoss()
+        optimizer = torch.optim.Adam(student.parameters(), lr=self.lr)
+        criterion = ReconstructionLoss(alpha = self.alpha)
                     
         for e in tqdm(range(epochs)):
             for i,(inputs,targets) in enumerate(trainset):
-                
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
 
                 y_pred = student(inputs)
@@ -77,7 +78,7 @@ class Unlearner:
         return dumb_model.to(self.device)
     
     def log_performance(self, y_pred:torch.Tensor, target:torch.Tensor, loss:float, epoch:int, batch:int, phase:str) -> None:
-        tp = torch.sum(torch.argmax(y_pred,axis=1)==target).item()
+        tp = (y_pred.argmax(axis=1)==target).sum().item()
         n  = target.size(0)
         self.log.append((phase, epoch, batch, tp, n, loss))
 
