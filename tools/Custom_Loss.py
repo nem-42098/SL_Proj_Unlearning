@@ -1,5 +1,6 @@
 from torch.nn import Module, CrossEntropyLoss, KLDivLoss
 from torch import Tensor
+from torch.nn.functional import softmax
 
 
 class ReconstructionLoss(Module):
@@ -12,7 +13,7 @@ class ReconstructionLoss(Module):
         self.kld = KLDivLoss(reduction='batchmean')
         self.alpha = alpha
 
-    def forward(self, output_teacher: Tensor, output_student: Tensor, labels: Tensor) -> float:
+    def forward(self, output_student: Tensor, output_teacher: Tensor, labels: Tensor = None) -> float:
         """
         Forward pass for the reconstruction algorithm
         :param output_teacher: The output of the teacher network as a torch.Tensor
@@ -20,7 +21,9 @@ class ReconstructionLoss(Module):
         :param labels: The actual target variable as a torch.Tensor
         :return: The loss value
         """
-
-        loss = self.cel(output_student, labels) + self.alpha * self.kld(output_student, output_teacher)
-
-        return loss
+        kld_loss = self.kld(softmax(output_student, dim=1), softmax(output_teacher, dim=1))
+        if labels is None:
+            return kld_loss
+        
+        cel_loss = self.cel(output_student, labels)
+        return cel_loss + self.alpha * kld_loss
