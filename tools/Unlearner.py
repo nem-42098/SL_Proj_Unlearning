@@ -44,11 +44,11 @@ class Unlearner:
         student.train()
         self.optimizer = torch.optim.Adam(student.parameters(), lr=self.lr)
         
-        for e in tqdm(forget_epochs):
+        for e in tqdm(range(forget_epochs)):
             # Erasure
             self.knowledge_transfer(student, self.dumb_model, False, forget_set, e)
             # Retrain
-            self.knowledge_transfer(student, self.og_model, False, retain_set, e)
+            self.knowledge_transfer(student, self.og_model, True, retain_set, e)
             
         self.retrained_model = student
         return self.retrained_model
