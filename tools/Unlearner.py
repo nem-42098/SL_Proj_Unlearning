@@ -20,7 +20,7 @@ class Unlearner:
         self.criterion = ReconstructionLoss(alpha=self.alpha)
         self.optimizer = None
 
-    def unlearn(self, retain_set: DataLoader, forget_set: DataLoader, forget_epochs: int = 4, retrain_epochs: int = 10) -> Module:
+    def unlearn(self, retain_set: DataLoader, forget_set: DataLoader, forget_epochs: int = 10, retrain_epochs: int = 4) -> Module:
         # Create stochastic network, completely at random
         self.dumb_model = self.reset_weights(self.og_model)
 
@@ -50,6 +50,9 @@ class Unlearner:
             self.knowledge_transfer(student, self.dumb_model, False, forget_set, e)
             # Retrain
             self.knowledge_transfer(student, self.og_model, True, retain_set, e)
+        for e in tqdm(range(retrain_epochs)):
+            # Retrain
+            self.knowledge_transfer(student, self.og_model, True, retain_set, e+forget_epochs)
             
         self.retrained_model = student
         return self.retrained_model
