@@ -19,6 +19,8 @@ class Unlearner:
         self.retrained_model = None
         self.criterion = ReconstructionLoss(alpha=self.alpha)
         self.optimizer = None
+        
+        self.distr = torch.distributions.dirichlet.Dirichlet(torch.tensor([1.]*10))
 
     def unlearn(self, retain_set: DataLoader, forget_set: DataLoader, forget_epochs: int = 10, retrain_epochs: int = 4) -> Module:
         # Create stochastic network, completely at random
@@ -77,6 +79,7 @@ class Unlearner:
                 loss = self.criterion(y_pred, y_teach, targets)
             else:
                 # in case of erasure
+                y_teach = self.distr.sample((y_pred.size(0),)).to(self.device)
                 loss = self.criterion(y_pred, y_teach)
             loss.backward()
             self.optimizer.step()
