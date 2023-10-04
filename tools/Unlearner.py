@@ -2,6 +2,7 @@ from copy import deepcopy
 from tqdm import tqdm
 import torch
 from torch.nn import Module
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from .Custom_Loss import ReconstructionLoss
 
@@ -94,3 +95,7 @@ class Unlearner:
         reset_parameters = getattr(layer, "reset_parameters", None)
         if callable(reset_parameters):
             layer.reset_parameters()
+        if hasattr(layer, 'bias') and layer.bias is not None:
+            nn.init.zeros_(layer.bias)
+        if hasattr(layer, 'weight'):
+            nn.init.xavier_uniform(layer.weight,10)
