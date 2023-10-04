@@ -101,7 +101,15 @@ class Unlearner:
         reset_parameters = getattr(layer, "reset_parameters", None)
         if callable(reset_parameters):
             layer.reset_parameters()
+        if isinstance(layer, nn.BatchNorm2d):
+            # Reset BatchNorm parameters (gamma and beta)
+            nn.init.ones_(layer.weight)  # Adjust 'a' and 'b' as needed
+            nn.init.zeros_(layer.bias)
+            # Reset BatchNorm running statistics (mean and variance)
+            layer.reset_running_stats()
+            return
+
         if hasattr(layer, 'bias') and layer.bias is not None:
             nn.init.zeros_(layer.bias)
         if hasattr(layer, 'weight'):
-            nn.init.xavier_uniform(layer.weight,10)
+            nn.init.xavier_normal_(layer.weight,10)
