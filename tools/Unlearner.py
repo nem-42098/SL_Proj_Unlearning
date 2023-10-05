@@ -49,9 +49,14 @@ class Unlearner:
         
         for e in tqdm(range(forget_epochs)):
             # Erasure
+
             self.knowledge_transfer(student, self.dumb_model, False, forget_set, e)
+
             # Retrain
+            """
             self.knowledge_transfer(student, self.og_model, True, retain_set, e)
+            """
+        self.erased_model = student
         for e in tqdm(range(retrain_epochs)):
             # Retrain
             self.knowledge_transfer(student, self.og_model, True, retain_set, e+forget_epochs)
