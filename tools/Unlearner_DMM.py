@@ -88,7 +88,7 @@ class UnlearnerDMM:
 
     def reset_weights(self, model: Module) -> Module:
         dumb_model = deepcopy(model)
-        dumb_model = dumb_model.apply(Unlearner_DMM.init_weights)
+        dumb_model = dumb_model.apply(UnlearnerDMM.init_weights)
         return dumb_model.to(self.device)
     
 
