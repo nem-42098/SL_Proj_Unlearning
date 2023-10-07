@@ -5,7 +5,6 @@ import torch
 from torch.nn import Module
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
-from typing import Self
 
 
 class UnlearnerDMM:
@@ -108,7 +107,7 @@ class UnlearnerDMM:
         if hasattr(layer, 'weight'):
             nn.init.xavier_normal_(layer.weight, 1)
 
-    def unlearn(self, forget_dataloader: DataLoader, forget_epochs: int = 10) -> Self:
+    def unlearn(self, forget_dataloader: DataLoader, forget_epochs: int = 10):
 
         self.forget_learn(forget_dataloader, forget_epochs)
 
