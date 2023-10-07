@@ -135,13 +135,13 @@ class UnlearnerDMM:
                 if name[2] == 'weight':
                     ### computing the weights
                     self.retained_model.features[eval(name[1])].weight = nn.Parameter(
-                        parameters * (1 / (1 - self.alpha)) - (
-                                self.alpha / (1 - self.alpha)) * self.forget_model.features[eval(name[1])].weight)
+                        parameters * (1 / self.alpha) - (
+                                (1 - self.alpha) / self.alpha) * self.forget_model.features[eval(name[1])].weight)
                 else:
                     ### Computing the bias
                     self.retained_model.features[eval(name[1])].bias = nn.Parameter(
-                        parameters * (1 / (1 - self.alpha)) - (
-                                self.alpha / (1 - self.alpha)) * self.forget_model.features[eval(name[1])].bias)
+                        parameters * (1 / self.alpha) - (
+                                (1 - self.alpha) / self.alpha) * self.forget_model.features[eval(name[1])].bias)
 
             ### Classifier
             elif name[0] == 'classifier':
@@ -149,13 +149,10 @@ class UnlearnerDMM:
                 if name[2] == 'weight':
 
                     self.retained_model.classifier[eval(name[1])].weight = nn.Parameter(
-                        parameters * (1 / (1 - self.alpha)) - (
-                                self.alpha / (1 - self.alpha)) * self.forget_model.classifier[
-                            eval(name[1])].weight)
+                        parameters * (1 / self.alpha) - (
+                                (1 - self.alpha) / self.alpha) * self.forget_model.classifier[eval(name[1])].weight)
                 else:
 
                     self.retained_model.classifier[eval(name[1])].bias = nn.Parameter(
-                        parameters * (1 / (1 - self.alpha)) - (
-                                self.alpha / (1 - self.alpha)) * self.forget_model.classifier[eval(name
-
-                                                                                                   [1])].bias)
+                        parameters * (1 / self.alpha) - (
+                                (1 - self.alpha) / self.alpha) * self.forget_model.classifier[eval(name[1])].bias)
