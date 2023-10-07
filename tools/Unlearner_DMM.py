@@ -109,7 +109,7 @@ class UnlearnerDMM:
 
     def unlearn(self):
         ### Initialse the model for the retrained dataset
-        self.retained_Model = self.reset_weights(self.combined_model)
+        self.retained_model = self.reset_weights(self.combined_model)
 
         for i, (name, parameters) in enumerate(self.combined_model.named_parameters()):
 
