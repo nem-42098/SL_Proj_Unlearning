@@ -1,5 +1,6 @@
 from copy import deepcopy
 from tqdm import tqdm
+import torch.nn as nn
 import torch
 from torch.nn import Module
 from torch.nn import CrossEntropyLoss
