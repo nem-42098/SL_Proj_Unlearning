@@ -6,7 +6,7 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
 
 
-class Unlearner_DMM(Module):
+class UnlearnerDMM:
     def __init__(self, model: Module, device: str = 'cuda', lr: float = 1e-6, alpha: float =0.5) :
         self.combined_model = model
         self.device = device
