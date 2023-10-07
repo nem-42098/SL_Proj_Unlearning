@@ -2,7 +2,7 @@ from copy import deepcopy
 from tqdm import tqdm
 import torch
 from torch.nn import Module
-import torch.nn as nn,CrossEntropyLoss
+from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
 
 
@@ -13,11 +13,11 @@ class Unlearner_DMM(Module):
         self.lr = lr
         self.alpha = alpha
         self.log = []
-        self.forget_model=None
-        self.retained_Model=None
+        self.forget_model = None
+        self.retained_Model = None
         self.criterion = CrossEntropyLoss(reduction='mean')
         self.optimizer = None
-        self.epoch_log=[]
+        self.epoch_log = []
 
     def forget_learn(self,forget_dataloader:DataLoader,forget_epochs:int=10):
                 
