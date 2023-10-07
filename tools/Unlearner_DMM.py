@@ -5,6 +5,7 @@ import torch
 from torch.nn import Module
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
+from typing import Self
 
 
 class UnlearnerDMM:
@@ -107,8 +108,11 @@ class UnlearnerDMM:
         if hasattr(layer, 'weight'):
             nn.init.xavier_normal_(layer.weight, 1)
 
-    def unlearn(self):
-        ### Initialse the model for the retrained dataset
+    def unlearn(self, forget_dataloader: DataLoader, forget_epochs: int = 10) -> Self:
+
+        self.forget_learn(forget_dataloader, forget_epochs)
+
+        ## Initialize the model for the retrained dataset
         self.retained_model = self.reset_weights(self.combined_model)
 
         for i, (name, parameters) in enumerate(self.combined_model.named_parameters()):
@@ -120,24 +124,28 @@ class UnlearnerDMM:
 
                 if name[2] == 'weight':
                     ### computing the weights
-                    self.retained_model.features[eval(name[1])].weight = nn.Parameter(parameters * (1 / (1 - self.alpha)) - (
-                            self.alpha / (1 - self.alpha)) * self.forget_model.features[eval(name[1])].weight)
+                    self.retained_model.features[eval(name[1])].weight = nn.Parameter(
+                        parameters * (1 / (1 - self.alpha)) - (
+                                self.alpha / (1 - self.alpha)) * self.forget_model.features[eval(name[1])].weight)
                 else:
                     ### Computing the bias
-                    self.retained_model.features[eval(name[1])].bias = nn.Parameter(parameters * (1 / (1 - self.alpha)) - (
-                            self.alpha / (1 - self.alpha)) * self.forget_model.features[eval(name[1])].bias)
+                    self.retained_model.features[eval(name[1])].bias = nn.Parameter(
+                        parameters * (1 / (1 - self.alpha)) - (
+                                self.alpha / (1 - self.alpha)) * self.forget_model.features[eval(name[1])].bias)
 
             ### Classifier
             elif name[0] == 'classifier':
 
                 if name[2] == 'weight':
 
-                    self.retained_model.classifier[eval(name[1])].weight = nn.Parameter(parameters * (1 / (1 - self.alpha)) - (
-                            self.alpha / (1 - self.alpha)) * self.forget_model.classifier[
-                                                                               eval(name[1])].weight)
+                    self.retained_model.classifier[eval(name[1])].weight = nn.Parameter(
+                        parameters * (1 / (1 - self.alpha)) - (
+                                self.alpha / (1 - self.alpha)) * self.forget_model.classifier[
+                            eval(name[1])].weight)
                 else:
 
-                    self.retained_model.classifier[eval(name[1])].bias = nn.Parameter(parameters * (1 / (1 - self.alpha)) - (
-                            self.alpha / (1 - self.alpha)) * self.forget_model.classifier[eval(name
+                    self.retained_model.classifier[eval(name[1])].bias = nn.Parameter(
+                        parameters * (1 / (1 - self.alpha)) - (
+                                self.alpha / (1 - self.alpha)) * self.forget_model.classifier[eval(name
 
-                                                                                                     [1])].bias)
+                                                                                                   [1])].bias)
