@@ -91,6 +91,7 @@ class UnlearnerDMM:
 
     @staticmethod
     def init_weights(layer: Module) -> None:
+        """
         reset_parameters = getattr(layer, "reset_parameters", None)
         if callable(reset_parameters):
             layer.reset_parameters()
@@ -106,6 +107,16 @@ class UnlearnerDMM:
             nn.init.zeros_(layer.bias)
         if hasattr(layer, 'weight'):
             nn.init.xavier_normal_(layer.weight, 1)
+        """
+        if isinstance(layer, nn.Conv2d):
+            nn.init.kaiming_normal_(layer.weight, mode='fan_out', nonlinearity='relu')
+            if layer.bias is not None:
+                nn.init.constant_(layer.bias, 0)
+        elif isinstance(layer, nn.BatchNorm2d):
+            nn.init.constant_(layer.weight, 1)
+            nn.init.constant_(layer.bias, 0)
+        elif isinstance(layer, nn.Linear):
+            nn.init.normal_(layer.weight, 0, 0.01)
 
     def unlearn(self, forget_dataloader: DataLoader, forget_epochs: int = 10):
 
