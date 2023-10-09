@@ -11,7 +11,8 @@ import numpy as np
 
 class Unlearner_FM(Module):
 
-    def __init__(self,Removal_Ratio:float,Pretrained_Model:Module,device:str='cuda',lr:float=1e-3):
+    def __init__(self,Removal_Ratio:float,Pretrained_Model:Module,lr:float=1e-3,device:str='cuda',):
+            super(Unlearner_FM, self).__init__()
         
             ### Removal Ratio of the paramters in the network  
             self.removal=Removal_Ratio
@@ -30,6 +31,9 @@ class Unlearner_FM(Module):
 
             ## Hessian Model wrt to forget Dataset
             self.forget_hess=None
+
+            ### logging fine tuning performance
+            self.log=[]
             
     
     def get_named_layers(net, is_state_dict=True):
@@ -169,7 +173,7 @@ class Unlearner_FM(Module):
 
             mask_index=mask_index[-int(len(Count)*self.removal):]
 
-            print('Total Number o Kernels and Neurons:{}, Number of masked Paramters:{}'.format(len(Count),int(len(Count)*self.removal)))
+            print('Total Number of Kernels and Neurons:{}, Number of masked Paramters:{}'.format(len(Count),int(len(Count)*self.removal)))
            
             ### sorting the index of the param in ascending order'
             mask_index.sort()
@@ -202,25 +206,7 @@ class Unlearner_FM(Module):
             new_model.load_state_dict(state_dict)
             new_model.cuda()
             return new_model, mask_index, len(Count)
-
-
-
-
-
-
-        
-
-
-
-
-
-
             
-
-            
-
-            
-
     @staticmethod
     def Hessian(dataloader:DataLoader,model:Module,device:str):
           
@@ -240,6 +226,12 @@ class Unlearner_FM(Module):
                   Remember while doing batch gradinet we approximate the gradient.
 
           """""
+
+          if next(model.parameters()).is_cuda:
+                        print("Model is on CUDA (GPU)")
+          else:
+                        model=model.to(device)
+
           ### Model in eval mode:
           model.eval()
 
@@ -247,16 +239,17 @@ class Unlearner_FM(Module):
           criterion=CrossEntropyLoss(reduction='mean')
        
           ### Creating a attribute for the model paramters which store the the second order derivative
-          for param in model.parameters:
+          for param in model.parameters():
                 param.grad2=0
         
           ### Iterating over the dataloader
           for _,(data,targets) in enumerate(dataloader):
-                data,targets=data.to(device),targets(device)
+                data,targets=data.to(device),targets.to(device)
                 ### logits from the model
                 output=model(data)
                 ### Convert to prob
-                prob=Softmax(output,dim=1)
+                soft_max=Softmax(dim=1)
+                prob=soft_max(output)
                 
                 ## Contribution of the paramters gradients wrt to each class computed sequentially weight by the
                 ## confidence in prediction
@@ -266,7 +259,7 @@ class Unlearner_FM(Module):
                       model.zero_grad()
                       loss.backward(retain_graph=True)
 
-                      for param in model.parameters:
+                      for param in model.parameters():
                             
                             ### those paramters only which required gradinet
                             if param.requires_grad:
@@ -285,12 +278,102 @@ class Unlearner_FM(Module):
                 ## the parameters of the model_hessian have hessian stored
                 param_hess.data=param.grad2
 
+          print('Finished Computing Hessian Diagonal')
+
           return model_hessian
     
+    @staticmethod 
+    def test(model, dataloader,device):
+        tp, n = 0,0
+        for X,y in dataloader:
+            X,y = X.to(device), y.to(device)
+
+            with torch.no_grad():
+                y_pred = model(X)
+
+            tp += (y_pred.argmax(axis=1) == y).sum().item()
+            n  += y.size(0)
+
+        return tp/n
+    
+    
+    def fine_tune(self,model,dataloader,epochs:int=5):
+
+        ### intialising the optimiser
+        optimizer = torch.optim.Adam(model.parameters(), lr=self.lr,weight_decay=0.01)
+        ### early stopping counter
+        stop_counter = 0
+        ## criterion
+        criterion=CrossEntropyLoss()
+
+        ### Epoch Log of losses
+        epoch_log=[]
+        
+
+        ###Iterations
+        for epoch in range(epochs):
+            ### iterate over the forget_dataloader
+            ### batch _loss
+            loss_epoch = 0
 
 
 
+            for i, (inputs, targets) in enumerate(dataloader):
 
+                
+                ### GPU push
+                inputs, targets = inputs.to(
+                    self.device), targets.to(self.device)
+                
+                if next(model.parameters()).is_cuda:
+                        print("Model is on CUDA (GPU)")
+                else:
+                        model=model.to(self.device)
+
+
+                ### predictions from the model
+                y_pred = model(inputs)
+
+                self.optimizer.zero_grad()
+
+                ###Calculate the Loss
+
+                loss = criterion(y_pred, targets)
+
+                ## Backpropogate the Loss
+                loss.backward()
+                ### Update the weights
+                optimizer.step()
+                ### Logging the measures
+                self.log_performance(y_pred, targets, loss.item(), epoch, i, phase='Training_forget_model')
+
+                #### Train-set loss
+                loss_epoch += loss.item()
+
+            loss_epoch /= (i + 1)
+
+            ### Check for early stopping: if the decrease in the loss is less than 1e-3 for straight 5 iterations
+            epoch_log.append(loss_epoch)
+            if epoch > 0:
+                if (self.epoch_log[-1] - loss_epoch) < 1e-3:
+                    stop_counter += 1
+
+                else:
+                    stop_counter = 0
+
+            if stop_counter == 5:
+
+                break
+
+        return model,epoch_log
+     
+    def log_performance(self, y_pred: torch.Tensor, target: torch.Tensor, loss: float, epoch: int, batch: int,
+                        phase: str) -> None:
+        tp = (y_pred.argmax(axis=1) == target).sum().item()
+        n = target.size(0)
+        self.log.append((phase, epoch, batch, tp, n, loss))
+    
+            
 
 
     def check(self):
