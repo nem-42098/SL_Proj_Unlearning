@@ -87,13 +87,21 @@ class Unlearner_FM(Module):
         return named_layers
 
     
-    def Fisher_Masking(self,retain_dataloader:DataLoader,forget_dataloader:DataLoader):
+    def Fisher_Masking(self,retain_dataloader:DataLoader,forget_dataloader:DataLoader,forget_hess_path:str,retain_hess_path:str):
           
             ### get the named layers
             named_layers=Unlearner_FM.get_named_layers(self.model,is_state_dict=False)
 
+
+            ### Only need to compute hessian once for given class removal
+            try: 
             ### get Hessain wrt to Forget dataloader
-            self.forget_hess=Unlearner_FM.Hessian(forget_dataloader,self.model,self.device)
+                forget_hess_state_dict=torch.load(forget_hess_path)
+                self.forget_hess=deepcopy(self.model)
+                self.forget_hess.load_state_dict(forget_hess_state_dict)
+            except:
+                 self.forget_hess=Unlearner_FM.Hessian(forget_dataloader,self.model,self.device)
+                 torch.save(self.forget_hess.state_dict(),forget_hess_path)
 
             ### Keeping count of Masked Parameters
             Count=[]
@@ -102,8 +110,17 @@ class Unlearner_FM(Module):
             #### We will cover two cases of unlearning: Retain Data Available and Not
             ### get Hessain wrt to Retain dataloader
             if retain_dataloader is not None:
+
+                try:
                  
-                self.retain_hess=Unlearner_FM.Hessian(retain_dataloader,self.model,self.device)
+                    retain_hess_state_dict=torch.load(retain_hess_path)
+                    self.retain_hess=deepcopy(self.model)
+                    self.retain_hess.load_state_dict(retain_hess_state_dict)
+                
+                except:
+                     
+                     self.retain_hess=Unlearner_FM.Hessian(retain_dataloader,self.model,self.device)
+                     torch.save(self.retain_hess.state_dict(),retain_hess_path)
 
 
                 for layer,(k1,param1),(k2,param2) in zip(named_layers,self.forget_hess.named_parameters(),self.retain_hess.named_parameters()):
@@ -284,6 +301,8 @@ class Unlearner_FM(Module):
                 param_hess.data=param.grad2
 
           print('Finished Computing Hessian Diagonal')
+
+
 
           return model_hessian
         
