@@ -381,7 +381,7 @@ class Unlearner_FM(Module):
             ### Check for early stopping: if the decrease in the loss is less than 1e-3 for straight 5 iterations
             epoch_log.append(loss_epoch)
             if epoch > 0:
-                if (self.epoch_log[-1] - loss_epoch) < 1e-3:
+                if (epoch_log[-1] - loss_epoch) < 1e-3:
                     stop_counter += 1
 
                 else:
