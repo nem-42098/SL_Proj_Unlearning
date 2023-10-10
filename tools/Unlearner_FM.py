@@ -7,6 +7,7 @@ from torch.nn import CrossEntropyLoss,Softmax
 from torch.utils.data import DataLoader
 from itertools import chain
 import numpy as np
+from tqdm import tqdm as tq
 
 
 class Unlearner_FM(Module):
@@ -321,7 +322,7 @@ class Unlearner_FM(Module):
         return tp/n
     
     
-    def fine_tune(self,model,dataloader,epochs:int=5):
+    def fine_tune(self,model,dataloader,epochs:int=10):
 
         ### intialising the optimiser
         optimizer = torch.optim.Adam(model.parameters(), lr=self.lr,weight_decay=0.01)
@@ -335,7 +336,7 @@ class Unlearner_FM(Module):
         
 
         ###Iterations
-        for epoch in range(epochs):
+        for epoch in tq(range(epochs)):
             ### iterate over the forget_dataloader
             ### batch _loss
             loss_epoch = 0
@@ -350,7 +351,8 @@ class Unlearner_FM(Module):
                     self.device), targets.to(self.device)
                 
                 if next(model.parameters()).is_cuda:
-                        print("Model is on CUDA (GPU)")
+                        pass
+                        # print("Model is on CUDA (GPU)")
                 else:
                         model=model.to(self.device)
 
@@ -358,7 +360,7 @@ class Unlearner_FM(Module):
                 ### predictions from the model
                 y_pred = model(inputs)
 
-                self.optimizer.zero_grad()
+                optimizer.zero_grad()
 
                 ###Calculate the Loss
 
@@ -369,7 +371,7 @@ class Unlearner_FM(Module):
                 ### Update the weights
                 optimizer.step()
                 ### Logging the measures
-                self.log_performance(y_pred, targets, loss.item(), epoch, i, phase='Training_forget_model')
+                self.log_performance(y_pred, targets, loss.item(), epoch, i, phase='Fine-tuning')
 
                 #### Train-set loss
                 loss_epoch += loss.item()
