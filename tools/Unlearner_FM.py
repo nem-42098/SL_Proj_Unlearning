@@ -69,7 +69,7 @@ class Unlearner_FM(Module):
                 layer_name = 'BatchNorm2D{}_{}'.format(
                     batchnorm2d_idx, mod.num_features)
                 named_layers.append(layer_name)
-                named_layers.append(layer_name + '_bais')
+                named_layers.append(layer_name + '_bias')
                 if is_state_dict:
                     named_layers.append(layer_name + '_running_mean')
                     named_layers.append(layer_name + '_running_var')
