@@ -81,6 +81,18 @@ class Unlearner_FM(Module):
                 named_layers.append(param.replace(is_running_mean=True))
                 
         return named_layers
+    
+    def load_hessian(self, path:str, dataloader) -> nn.Module:
+        if path is None or not os.path.exists(path):
+            hess = Unlearner_FM.Hessian(
+                dataloader, self.model, self.device)
+            torch.save(hess.state_dict(), path)
+        else:
+            hess_state_dict = torch.load(path)
+            hess = deepcopy(self.model)
+            hess.load_state_dict(hess_state_dict)
+            
+        return hess
 
     def Fisher_Masking(self, retain_dataloader: DataLoader, forget_dataloader: DataLoader, forget_hess_path: str, retain_hess_path: str):
 
@@ -89,15 +101,7 @@ class Unlearner_FM(Module):
             self.model, is_state_dict=False)
 
         # Only need to compute hessian once for given class removal
-        try:
-            # get Hessain wrt to Forget dataloader
-            forget_hess_state_dict = torch.load(forget_hess_path)
-            self.forget_hess = deepcopy(self.model)
-            self.forget_hess.load_state_dict(forget_hess_state_dict)
-        except:
-            self.forget_hess = Unlearner_FM.Hessian(
-                forget_dataloader, self.model, self.device)
-            torch.save(self.forget_hess.state_dict(), forget_hess_path)
+        self.forget_hess = self.load_hessian(forget_hess_path, forget_loader)
 
         # Keeping count of Masked Parameters
         Count = []
