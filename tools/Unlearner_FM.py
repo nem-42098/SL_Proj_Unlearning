@@ -190,11 +190,8 @@ class Unlearner_FM(Module):
                 Remember while doing batch gradinet we approximate the gradient.
 
         """""
-
-        if next(model.parameters()).is_cuda:
-            print("Model is on CUDA (GPU)")
-        else:
-            model = model.to(device)
+        
+        model = model.to(device)
 
         # Model in eval mode:
         model.eval()
@@ -214,8 +211,7 @@ class Unlearner_FM(Module):
             model = model.to(device)
             output = model(data)
             # Convert to prob
-            soft_max = Softmax(dim=1)
-            prob = soft_max(output)
+            prob = softmax(output, dim=1)
 
             # Contribution of the paramters gradients wrt to each class computed sequentially weight by the
             # confidence in prediction
