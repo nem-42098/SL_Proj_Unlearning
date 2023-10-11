@@ -108,79 +108,33 @@ class Unlearner_FM(Module):
 
         # We will cover two cases of unlearning: Retain Data Available and Not
         # get Hessain wrt to Retain dataloader
-        if retain_dataloader is not None:
+        if retain_loader is not None:
+            self.retain_hess = self.load_hessian(retain_hess_path, retain_loader)
+        else:
+            # placeholder
+            self.retain_hess = self.forget_hess
+            
 
-            try:
+        for layer, (_, param1), (_, param2) in zip(named_layers, self.forget_hess.named_parameters(), self.retain_hess.named_parameters()):
 
-                retain_hess_state_dict = torch.load(retain_hess_path)
-                self.retain_hess = deepcopy(self.model)
-                self.retain_hess.load_state_dict(retain_hess_state_dict)
+            if not layer.is_bias and layer.kind in [nn.Conv2d, nn.Linear]:
+                # Difference between the hessian diff between the two dataloader. Hessain expectation gives us FIM(fisher Information matrix)
 
-            except:
+                fisher_diff = param1.data
+                if retain_loader is not None:
+                    fisher_diff -= param2.data
+                    
 
-                self.retain_hess = Unlearner_FM.Hessian(
-                    retain_dataloader, self.model, self.device)
-                torch.save(self.retain_hess.state_dict(), retain_hess_path)
-
-            for layer, (k1, param1), (k2, param2) in zip(named_layers, self.forget_hess.named_parameters(), self.retain_hess.named_parameters()):
-
-                if layer.startswith('Conv2d') and not layer.endswith('bias'):
-                    # Difference between the hessian diff between the two dataloader. Hessain expectation gives us FIM(fisher Information matrix)
-
-                    fisher_diff = param1.data-param2.data
-
+                if layer.kind is nn.Conv2d:
                     # total number of parameters in the kernel
                     total_size = fisher_diff.size()[-1]*fisher_diff.size()[-2]
 
                     # Average contributions of fisher information by the kernel channels
-                    fisher_diff = torch.sum(
-                        fisher_diff, dim=[-1, -2])/total_size
+                    fisher_diff = torch.sum(fisher_diff, dim=[-1, -2])/total_size
 
-                    # 1D flatten
-                    fisher_diff = fisher_diff.view(-1).cpu().detach().numpy()
+                # 1D flatten
+                fisher_diff = fisher_diff.view(-1).cpu().detach().numpy()
 
-                    Count.append(fisher_diff)
-
-                elif layer.startswith('Linear') and not layer.endswith('bias'):
-
-                    # Difference between the hessian diff between the two dataloader. Hessain expectation gives us FIM(fisher Information matrix)
-
-                    fisher_diff = param1.data-param2.data
-
-                    # 1D flatten
-                    fisher_diff = fisher_diff.view(-1).cpu().detach().numpy()
-
-                    Count.append(fisher_diff)
-
-        else:
-
-            for layer, (k1, param1) in zip(named_layers, self.forget_hess.named_parameters()):
-
-                if layer.startswith('Conv2d') and not layer.endswith('bias'):
-                    # Difference between the hessian for the two dataloader. Hessain expectation gives us FIM(fisher Information matrix)
-
-                    fisher_diff = param1.data
-
-                    # total number of parameters in the kernel
-                    total_size = fisher_diff.size()[-1]*fisher_diff.size()[-2]
-
-                    # Average contributions of fisher information by the kernel
-                    fisher_diff = torch.sum(
-                        fisher_diff, dim=[-1, -2])/total_size
-
-                    # 1D flatten
-                    fisher_diff = fisher_diff.view(-1).cpu().detach().numpy()
-
-                    Count.append(fisher_diff)
-
-                elif layer.startswith('Linear') and not layer.endswith('bias'):
-
-                    # Difference between the hessian for the two dataloader. Hessain expectation gives us FIM(fisher Information matrix)
-
-                    fisher_diff = param1.data
-
-                    # 1D flatten
-                    fisher_diff = fisher_diff.view(-1).cpu().detach().numpy()
 
                     Count.append(fisher_diff)
 
