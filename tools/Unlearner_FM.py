@@ -61,9 +61,12 @@ class Unlearner_FM(Module):
         named_layers = []
         # recursive iteration : [More efficeint than using mutiple model.named_children for loops]
         for mod in net.modules():
+            if type(mod) not in [nn.Linear, nn.Conv2d, nn.ConvTranspose2d, nn.BatchNorm2d]:
+                print(type(mod))
+                continue
+
             if hasattr(mod, 'in_channels') and hasattr(mod, 'out_channels'):
                 param = Layer(type(mod), mod.in_channels, mod.out_channels)
-                named_layers.append(param)
             elif hasattr(mod, 'num_features'):
                 param = Layer(type(mod), mod.num_features, mod.num_features)
             named_layers.append(param)
