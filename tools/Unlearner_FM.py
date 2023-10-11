@@ -7,6 +7,26 @@ from torch.nn import CrossEntropyLoss, Softmax
 from torch.utils.data import DataLoader
 from itertools import chain
 import numpy as np
+import os
+from typing import Type
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class Layer:
+    """Keep information about a layer"""
+    kind: Type
+    in_channels: int
+    out_channels: int
+    idx: int                        = 0
+    is_bias: bool                   = False
+    is_running_mean: bool           = False
+    is_running_var: bool            = False
+    is_num_batches_tracked: bool    = False
+    
+    def __post_init__(self):
+        assert self.is_bias + self.is_running_mean + self.is_running_var + self.is_num_batches_tracked <=1
+        # assert self.kind in ['Conv2d', 'ConvT2d', 'BatchNorm2D', 'Linear']
+    
 
 
 class Unlearner_FM(Module):
@@ -37,52 +57,28 @@ class Unlearner_FM(Module):
         
     @staticmethod
     def get_named_layers(net, is_state_dict=True):
-        """""
-
-        Convert the Model structure into list of string whose individual element is of the form "layer_name"+ "param_type"{weight or bias or running_mean or running_var}
-
-        """""
-        conv2d_idx = 0
-        convT2d_idx = 0
-        linear_idx = 0
-        batchnorm2d_idx = 0
+        """
+        Convert the Model structure into list of string whose individual element is of the form:
+            "layer_name"+ "param_type"{weight or bias or running_mean or running_var}
+        """
         named_layers = []
         # recursive iteration : [More efficeint than using mutiple model.named_children for loops]
         for mod in net.modules():
-            if isinstance(mod, torch.nn.Conv2d):
-                layer_name = 'Conv2d{}_{}-{}'.format(
-                    conv2d_idx, mod.in_channels, mod.out_channels
-                )
-                named_layers.append(layer_name)
-                if mod.bias is not None:
-                    named_layers.append(layer_name + '_bias')
-                conv2d_idx += 1
-            elif isinstance(mod, torch.nn.ConvTranspose2d):
-                layer_name = 'ConvT2d{}_{}-{}'.format(
-                    conv2d_idx, mod.in_channels, mod.out_channels
-                )
-                named_layers.append(layer_name)
-                if hasattr(mod, "bias"):
-                    named_layers.append(layer_name + '_bias')
-                convT2d_idx += 1
-            elif isinstance(mod, torch.nn.BatchNorm2d):
-                layer_name = 'BatchNorm2D{}_{}'.format(
-                    batchnorm2d_idx, mod.num_features)
-                named_layers.append(layer_name)
-                named_layers.append(layer_name + '_bias')
-                if is_state_dict:
-                    named_layers.append(layer_name + '_running_mean')
-                    named_layers.append(layer_name + '_running_var')
-                    named_layers.append(layer_name + '_num_bathes_tracked')
-                batchnorm2d_idx += 1
-            elif isinstance(mod, torch.nn.Linear):
-                layer_name = 'Linear{}_{}-{}'.format(
-                    linear_idx, mod.in_features, mod.out_features
-                )
-                named_layers.append(layer_name)
-                if hasattr(mod, "bias"):
-                    named_layers.append(layer_name + '_bias')
-                linear_idx += 1
+            if hasattr(mod, 'in_channels') and hasattr(mod, 'out_channels'):
+                param = Layer(type(mod), mod.in_channels, mod.out_channels)
+                named_layers.append(param)
+            elif hasattr(mod, 'num_features'):
+                param = Layer(type(mod), mod.num_features, mod.num_features)
+            named_layers.append(param)    
+            
+            if hasattr(mod, 'bias') and mod.bias is not None:
+                named_layers.append(param.replace(is_bias=True))
+            
+            if is_state_dict:
+                named_layers.append(param.replace(is_running_var=True))
+                named_layers.append(param.replace(is_num_batches_tracked=True))
+                named_layers.append(param.replace(is_running_mean=True))
+                
         return named_layers
 
     def Fisher_Masking(self, retain_dataloader: DataLoader, forget_dataloader: DataLoader, forget_hess_path: str, retain_hess_path: str):
@@ -204,7 +200,7 @@ class Unlearner_FM(Module):
 
         num, idx, temp_idx = 0, 0, []
         for n, (k, v) in zip(named_layers, state_dict.items()):
-            if n.startswith('Conv2d') and not n.endswith('bias'):
+            if n.kind is nn.Conv2d and not n.is_bias:
                 while idx < len(mask_index) and mask_index[idx] < num + v.size()[0]*v.size()[1]:
                     # get the filter number
                     row = (mask_index[idx] - num) // v.size()[1]
@@ -214,7 +210,7 @@ class Unlearner_FM(Module):
                     idx += 1
                 if num < len(Count):
                     num += v.size()[0]*v.size()[1]
-            if n.startswith('Linear') and not n.endswith('bias'):
+            if n.kind is nn.Linear and not n.is_bias:
                 while idx < len(mask_index) and mask_index[idx] < num + v.size()[0]*v.size()[1]:
                     row = (mask_index[idx] - num) // v.size()[1]
                     col = (mask_index[idx] - num) % v.size()[1]
