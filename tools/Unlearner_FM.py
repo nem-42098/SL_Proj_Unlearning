@@ -29,6 +29,9 @@ class Layer:
             self.is_running_var + self.is_num_batches_tracked <= 1
         # assert self.kind in ['Conv2d', 'ConvT2d', 'BatchNorm2D', 'Linear']
 
+    def replace(self, **kw) -> Layer:
+        return replace(self, **kw)
+
 
 class Unlearner_FM(Module):
 
