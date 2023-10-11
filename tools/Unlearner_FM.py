@@ -34,25 +34,18 @@ class Unlearner_FM(Module):
 
     def __init__(self, Removal_Ratio: float, Pretrained_Model: Module, lr: float = 1e-3, device: str = 'cuda',):
         super(Unlearner_FM, self).__init__()
-
         # Removal Ratio of the paramters in the network
         self.removal = Removal_Ratio
-
         # Pretrain_model
         self.model = Pretrained_Model
-
         # Learning Rate in case of fine tuning the network after masking the parameters
         self.lr = lr
-
         ###
         self.device = device
-
         # Hessian model wrt  retain dataset
         self.retain_hess = None
-
         # Hessian Model wrt to forget Dataset
         self.forget_hess = None
-
         # logging fine tuning performance
         self.log = []
         
@@ -94,7 +87,8 @@ class Unlearner_FM(Module):
             
         return hess
 
-    def Fisher_Masking(self, retain_dataloader: DataLoader, forget_dataloader: DataLoader, forget_hess_path: str, retain_hess_path: str):
+
+    def Fisher_Masking(self, retain_loader: DataLoader, forget_loader: DataLoader, forget_hess_path: str, retain_hess_path: str):
 
         # get the named layers
         named_layers = Unlearner_FM.get_named_layers(
@@ -104,7 +98,7 @@ class Unlearner_FM(Module):
         self.forget_hess = self.load_hessian(forget_hess_path, forget_loader)
 
         # Keeping count of Masked Parameters
-        Count = []
+        count = []
 
         # We will cover two cases of unlearning: Retain Data Available and Not
         # get Hessain wrt to Retain dataloader
@@ -135,21 +129,21 @@ class Unlearner_FM(Module):
                 # 1D flatten
                 fisher_diff = fisher_diff.view(-1).cpu().detach().numpy()
 
+                count.append(fisher_diff)
 
-                    Count.append(fisher_diff)
 
         # Converting the list of list tp => list
-        Count = list(chain.from_iterable(Count))
+        count = list(chain.from_iterable(count))
 
-        mask_index = np.argsort(np.array(Count))
+        mask_index = np.argsort(np.array(count))
 
         # Getting the index of the kernels channels for Convolution layers or param in Linear layer which have
         # high contribution on the forget dataset and less on retrain dataset
 
-        mask_index = mask_index[-int(len(Count)*self.removal):]
+        mask_index = mask_index[-int(len(count)*self.removal):]
 
         print('Total Number of Kernels and Neurons:{}, Number of masked Paramters:{}'.format(
-            len(Count), int(len(Count)*self.removal)))
+            len(count), int(len(count)*self.removal)))
 
         # sorting the index of the param in ascending order'
         mask_index.sort()
@@ -167,7 +161,7 @@ class Unlearner_FM(Module):
                     col = (mask_index[idx] - num) % v.size()[1]
                     state_dict[k][row, col, :, :] = 0.0
                     idx += 1
-                if num < len(Count):
+                if num < len(count):
                     num += v.size()[0]*v.size()[1]
             if n.kind is nn.Linear and not n.is_bias:
                 while idx < len(mask_index) and mask_index[idx] < num + v.size()[0]*v.size()[1]:
@@ -175,13 +169,13 @@ class Unlearner_FM(Module):
                     col = (mask_index[idx] - num) % v.size()[1]
                     state_dict[k][row, col] = 0.0
                     idx += 1
-                if num < len(Count):
+                if num < len(count):
                     num += v.size()[0]*v.size()[1]
-        assert num == len(Count)
+        assert num == len(count)
         new_model = deepcopy(self.model)
         new_model.load_state_dict(state_dict)
         new_model.cuda()
-        return new_model, mask_index, len(Count)
+        return new_model, mask_index, len(count)
 
     @staticmethod
     def Hessian(dataloader: DataLoader, model: Module, device: str):
@@ -251,7 +245,7 @@ class Unlearner_FM(Module):
         # Copy of the model having Diag(hessian) with respect to the given dataloader
         model_hessian = deepcopy(model)
 
-        # Averaging the COmpute Diag with the size of the Dataloader
+        # Averaging the Compute Diag with the size of the Dataloader
 
         for param_hess, param in zip(model_hessian.parameters(), model.parameters()):
             param.grad2 /= len(dataloader)
