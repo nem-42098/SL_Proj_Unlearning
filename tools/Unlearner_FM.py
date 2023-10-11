@@ -391,9 +391,3 @@ class Unlearner_FM(Module):
         n = target.size(0)
         self.log.append((phase, epoch, batch, tp, n, loss))
 
-    def check(self):
-        """""
-          Validation of the input paramters
-        """""
-
-        pass
