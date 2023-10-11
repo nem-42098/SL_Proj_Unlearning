@@ -11,22 +11,23 @@ import os
 from typing import Type
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True)
 class Layer:
     """Keep information about a layer"""
     kind: Type
     in_channels: int
     out_channels: int
-    idx: int                        = 0
-    is_bias: bool                   = False
-    is_running_mean: bool           = False
-    is_running_var: bool            = False
-    is_num_batches_tracked: bool    = False
-    
+    idx: int = 0
+    is_bias: bool = False
+    is_running_mean: bool = False
+    is_running_var: bool = False
+    is_num_batches_tracked: bool = False
+
     def __post_init__(self):
-        assert self.is_bias + self.is_running_mean + self.is_running_var + self.is_num_batches_tracked <=1
+        assert self.is_bias + self.is_running_mean + \
+            self.is_running_var + self.is_num_batches_tracked <= 1
         # assert self.kind in ['Conv2d', 'ConvT2d', 'BatchNorm2D', 'Linear']
-    
 
 
 class Unlearner_FM(Module):
@@ -47,7 +48,7 @@ class Unlearner_FM(Module):
         self.forget_hess = None
         # logging fine tuning performance
         self.log = []
-        
+
     @staticmethod
     def get_named_layers(net, is_state_dict=True):
         """
@@ -62,19 +63,19 @@ class Unlearner_FM(Module):
                 named_layers.append(param)
             elif hasattr(mod, 'num_features'):
                 param = Layer(type(mod), mod.num_features, mod.num_features)
-            named_layers.append(param)    
-            
+            named_layers.append(param)
+
             if hasattr(mod, 'bias') and mod.bias is not None:
                 named_layers.append(param.replace(is_bias=True))
-            
+
             if is_state_dict:
                 named_layers.append(param.replace(is_running_var=True))
                 named_layers.append(param.replace(is_num_batches_tracked=True))
                 named_layers.append(param.replace(is_running_mean=True))
-                
+
         return named_layers
-    
-    def load_hessian(self, path:str, dataloader) -> nn.Module:
+
+    def load_hessian(self, path: str, dataloader) -> nn.Module:
         if path is None or not os.path.exists(path):
             hess = Unlearner_FM.Hessian(
                 dataloader, self.model, self.device)
@@ -83,9 +84,8 @@ class Unlearner_FM(Module):
             hess_state_dict = torch.load(path)
             hess = deepcopy(self.model)
             hess.load_state_dict(hess_state_dict)
-            
-        return hess
 
+        return hess
 
     def Fisher_Masking(self, retain_loader: DataLoader, forget_loader: DataLoader, forget_hess_path: str, retain_hess_path: str):
 
@@ -102,11 +102,11 @@ class Unlearner_FM(Module):
         # We will cover two cases of unlearning: Retain Data Available and Not
         # get Hessain wrt to Retain dataloader
         if retain_loader is not None:
-            self.retain_hess = self.load_hessian(retain_hess_path, retain_loader)
+            self.retain_hess = self.load_hessian(
+                retain_hess_path, retain_loader)
         else:
             # placeholder
             self.retain_hess = self.forget_hess
-            
 
         for layer, (_, param1), (_, param2) in zip(named_layers, self.forget_hess.named_parameters(), self.retain_hess.named_parameters()):
 
@@ -116,20 +116,19 @@ class Unlearner_FM(Module):
                 fisher_diff = param1.data
                 if retain_loader is not None:
                     fisher_diff -= param2.data
-                    
 
                 if layer.kind is nn.Conv2d:
                     # total number of parameters in the kernel
                     total_size = fisher_diff.size()[-1]*fisher_diff.size()[-2]
 
                     # Average contributions of fisher information by the kernel channels
-                    fisher_diff = torch.sum(fisher_diff, dim=[-1, -2])/total_size
+                    fisher_diff = torch.sum(
+                        fisher_diff, dim=[-1, -2])/total_size
 
                 # 1D flatten
                 fisher_diff = fisher_diff.view(-1).cpu().detach().numpy()
 
                 count.append(fisher_diff)
-
 
         # Converting the list of list tp => list
         count = list(chain.from_iterable(count))
@@ -158,7 +157,7 @@ class Unlearner_FM(Module):
                     row = (mask_index[idx] - num) // v.size()[1]
                     # Channel number
                     col = (mask_index[idx] - num) % v.size()[1]
-                    
+
                     if layer.kind is nn.Conv2d:
                         state_dict[k][row, col, :, :] = 0.0
                     elif layer.kind is nn.Linear:
@@ -172,88 +171,86 @@ class Unlearner_FM(Module):
         new_model.load_state_dict(state_dict)
         new_model.cuda()
         return new_model, mask_index, len(count)
-      
+
     @staticmethod
-    def Hessian(dataloader:DataLoader,model:Module,device:str):
-          
-          """""
-            Compute the Diagonal of the Hessian Matrix for the given Dataloader. 
-            Note: In the implementation of the Diagonal of the Hessian Matrix we have weighted the second order derivatives by the 
-                  confidence of the samples wrt to the class.The significance of multiplying the squared gradient by the probability for 
-                  that class lies in estimating the curvature of the loss function with respect to the parameters. The Hessian matrix 
-                  represents the second-order derivatives of the loss function with respect to the parameters and provides information 
-                  about the local geometric properties of the loss surface.
+    def Hessian(dataloader: DataLoader, model: Module, device: str):
+        """""
+          Compute the Diagonal of the Hessian Matrix for the given Dataloader. 
+          Note: In the implementation of the Diagonal of the Hessian Matrix we have weighted the second order derivatives by the 
+                confidence of the samples wrt to the class.The significance of multiplying the squared gradient by the probability for 
+                that class lies in estimating the curvature of the loss function with respect to the parameters. The Hessian matrix 
+                represents the second-order derivatives of the loss function with respect to the parameters and provides information 
+                about the local geometric properties of the loss surface.
 
-                  In the context of training a model for classification tasks, the probability for a particular class in the mini-batch 
-                  measures the likelihood of that class being the correct label. By multiplying the squared gradient by this probability
-                  , the algorithm assigns a higher weight to gradients associated with classes that are more likely to be correct. This 
-                  weighting reflects the importance of each class in determining the curvature of the loss function.
+                In the context of training a model for classification tasks, the probability for a particular class in the mini-batch 
+                measures the likelihood of that class being the correct label. By multiplying the squared gradient by this probability
+                , the algorithm assigns a higher weight to gradients associated with classes that are more likely to be correct. This 
+                weighting reflects the importance of each class in determining the curvature of the loss function.
 
-                  Remember while doing batch gradinet we approximate the gradient.
+                Remember while doing batch gradinet we approximate the gradient.
 
-          """""
+        """""
 
-          if next(model.parameters()).is_cuda:
-                        print("Model is on CUDA (GPU)")
-          else:
-                        model=model.to(device)
+        if next(model.parameters()).is_cuda:
+            print("Model is on CUDA (GPU)")
+        else:
+            model = model.to(device)
 
-          ### Model in eval mode:
-          model.eval()
+        # Model in eval mode:
+        model.eval()
 
-          ### Criterion of the Loss
-          criterion=CrossEntropyLoss(reduction='mean')
-       
-          ### Creating a attribute for the model paramters which store the the second order derivative
-          for param in model.parameters():
-                param.grad2=0
-        
-          ### Iterating over the dataloader
-          for _,(data,targets) in enumerate(dataloader):
-                data,targets=data.to(device),targets.to(device)
+        # Criterion of the Loss
+        criterion = CrossEntropyLoss(reduction='mean')
 
-                ### logits from the model
-                model=model.to(device)
-                output=model(data)
-                ### Convert to prob
-                soft_max=Softmax(dim=1)
-                prob=soft_max(output)
-                
-                ## Contribution of the paramters gradients wrt to each class computed sequentially weight by the
-                ## confidence in prediction
-                for y in range(output.shape[1]):
-                      class_target=torch.empty_like(targets).fill_(y)
-                      loss=criterion(prob,class_target)
-                      
-                      model.zero_grad()
-                      loss.backward(retain_graph=True)
-                      model.to('cpu')
-                      for param in model.parameters():
-                            
-                            ### those paramters only which required gradinet
-                            if param.requires_grad:
-                                ### weighted by the confidence in prediction for that class
-                                param.grad2+=prob[:,y].float().mean().detach().cpu()*param.grad.data.pow(2) ### Since we only account for the Diag
-                      model.to(device)
+        # Creating a attribute for the model paramters which store the the second order derivative
+        for param in model.parameters():
+            param.grad2 = 0
 
-          model.zero_grad()
-          model.to('cpu')
-          ### Copy of the model having Diag(hessian) with respect to the given dataloader
-          model_hessian=deepcopy(model)
+        # Iterating over the dataloader
+        for _, (data, targets) in enumerate(dataloader):
+            data, targets = data.to(device), targets.to(device)
 
-          ### Averaging the COmpute Diag with the size of the Dataloader
+            # logits from the model
+            model = model.to(device)
+            output = model(data)
+            # Convert to prob
+            soft_max = Softmax(dim=1)
+            prob = soft_max(output)
 
-          for param_hess,param in zip(model_hessian.parameters(),model.parameters()):
-                param.grad2 /= len(dataloader)
-                ## the parameters of the model_hessian have hessian stored
-                param_hess.data=param.grad2
+            # Contribution of the paramters gradients wrt to each class computed sequentially weight by the
+            # confidence in prediction
+            for y in range(output.shape[1]):
+                class_target = torch.empty_like(targets).fill_(y)
+                loss = criterion(prob, class_target)
 
-          print('Finished Computing Hessian Diagonal')
+                model.zero_grad()
+                loss.backward(retain_graph=True)
+                model.to('cpu')
+                for param in model.parameters():
 
+                    # those paramters only which required gradinet
+                    if param.requires_grad:
+                        # weighted by the confidence in prediction for that class
+                        # Since we only account for the Diag
+                        param.grad2 += prob[:, y].float().mean().detach().cpu() * \
+                            param.grad.data.pow(2)
+                model.to(device)
 
+        model.zero_grad()
+        model.to('cpu')
+        # Copy of the model having Diag(hessian) with respect to the given dataloader
+        model_hessian = deepcopy(model)
 
-          return model_hessian
-        
+        # Averaging the COmpute Diag with the size of the Dataloader
+
+        for param_hess, param in zip(model_hessian.parameters(), model.parameters()):
+            param.grad2 /= len(dataloader)
+            # the parameters of the model_hessian have hessian stored
+            param_hess.data = param.grad2
+
+        print('Finished Computing Hessian Diagonal')
+
+        return model_hessian
 
     @staticmethod
     def test(model, dataloader, device):
@@ -341,4 +338,3 @@ class Unlearner_FM(Module):
         tp = (y_pred.argmax(axis=1) == target).sum().item()
         n = target.size(0)
         self.log.append((phase, epoch, batch, tp, n, loss))
-
