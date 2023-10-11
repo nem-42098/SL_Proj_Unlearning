@@ -172,85 +172,88 @@ class Unlearner_FM(Module):
         new_model.load_state_dict(state_dict)
         new_model.cuda()
         return new_model, mask_index, len(count)
-
+      
     @staticmethod
-    def Hessian(dataloader: DataLoader, model: Module, device: str):
-        """""
-          Compute the Diagonal of the Hessian Matrix for the given Dataloader. 
-          Note: In the implementation of the Diagonal of the Hessian Matrix we have weighted the second order derivatives by the 
-                confidence of the samples wrt to the class.The significance of multiplying the squared gradient by the probability for 
-                that class lies in estimating the curvature of the loss function with respect to the parameters. The Hessian matrix 
-                represents the second-order derivatives of the loss function with respect to the parameters and provides information 
-                about the local geometric properties of the loss surface.
+    def Hessian(dataloader:DataLoader,model:Module,device:str):
+          
+          """""
+            Compute the Diagonal of the Hessian Matrix for the given Dataloader. 
+            Note: In the implementation of the Diagonal of the Hessian Matrix we have weighted the second order derivatives by the 
+                  confidence of the samples wrt to the class.The significance of multiplying the squared gradient by the probability for 
+                  that class lies in estimating the curvature of the loss function with respect to the parameters. The Hessian matrix 
+                  represents the second-order derivatives of the loss function with respect to the parameters and provides information 
+                  about the local geometric properties of the loss surface.
 
-                In the context of training a model for classification tasks, the probability for a particular class in the mini-batch 
-                measures the likelihood of that class being the correct label. By multiplying the squared gradient by this probability
-                , the algorithm assigns a higher weight to gradients associated with classes that are more likely to be correct. This 
-                weighting reflects the importance of each class in determining the curvature of the loss function.
+                  In the context of training a model for classification tasks, the probability for a particular class in the mini-batch 
+                  measures the likelihood of that class being the correct label. By multiplying the squared gradient by this probability
+                  , the algorithm assigns a higher weight to gradients associated with classes that are more likely to be correct. This 
+                  weighting reflects the importance of each class in determining the curvature of the loss function.
 
-                Remember while doing batch gradinet we approximate the gradient.
+                  Remember while doing batch gradinet we approximate the gradient.
 
-        """""
+          """""
 
-        if next(model.parameters()).is_cuda:
-            print("Model is on CUDA (GPU)")
-        else:
-            model = model.to(device)
+          if next(model.parameters()).is_cuda:
+                        print("Model is on CUDA (GPU)")
+          else:
+                        model=model.to(device)
 
-        # Model in eval mode:
-        model.eval()
+          ### Model in eval mode:
+          model.eval()
 
-        # Criterion of the Loss
-        criterion = CrossEntropyLoss(reduction='mean')
+          ### Criterion of the Loss
+          criterion=CrossEntropyLoss(reduction='mean')
+       
+          ### Creating a attribute for the model paramters which store the the second order derivative
+          for param in model.parameters():
+                param.grad2=0
+        
+          ### Iterating over the dataloader
+          for _,(data,targets) in enumerate(dataloader):
+                data,targets=data.to(device),targets.to(device)
 
-        # Creating a attribute for the model paramters which store the the second order derivative
-        for param in model.parameters():
-            param.grad2 = 0
+                ### logits from the model
+                model=model.to(device)
+                output=model(data)
+                ### Convert to prob
+                soft_max=Softmax(dim=1)
+                prob=soft_max(output)
+                
+                ## Contribution of the paramters gradients wrt to each class computed sequentially weight by the
+                ## confidence in prediction
+                for y in range(output.shape[1]):
+                      class_target=torch.empty_like(targets).fill_(y)
+                      loss=criterion(prob,class_target)
+                      
+                      model.zero_grad()
+                      loss.backward(retain_graph=True)
+                      model.to('cpu')
+                      for param in model.parameters():
+                            
+                            ### those paramters only which required gradinet
+                            if param.requires_grad:
+                                ### weighted by the confidence in prediction for that class
+                                param.grad2+=prob[:,y].float().mean().detach().cpu()*param.grad.data.pow(2) ### Since we only account for the Diag
+                      model.to(device)
 
-        # Iterating over the dataloader
-        for _, (data, targets) in enumerate(dataloader):
-            data, targets = data.to(device), targets.to(device)
+          model.zero_grad()
+          model.to('cpu')
+          ### Copy of the model having Diag(hessian) with respect to the given dataloader
+          model_hessian=deepcopy(model)
 
-            # logits from the model
-            model = model.to(device)
-            output = model(data)
-            # Convert to prob
-            prob = softmax(output, dim=1)
+          ### Averaging the COmpute Diag with the size of the Dataloader
 
-            # Contribution of the paramters gradients wrt to each class computed sequentially weight by the
-            # confidence in prediction
-            for y in range(output.shape[1]):
-                class_target = torch.empty_like(targets).fill_(y)
-                loss = criterion(prob, class_target)
+          for param_hess,param in zip(model_hessian.parameters(),model.parameters()):
+                param.grad2 /= len(dataloader)
+                ## the parameters of the model_hessian have hessian stored
+                param_hess.data=param.grad2
 
-                model.zero_grad()
-                loss.backward(retain_graph=True)
-                model.to('cpu')
-                for param in model.parameters():
+          print('Finished Computing Hessian Diagonal')
 
-                    # those paramters only which required gradinet
-                    if param.requires_grad:
-                        # weighted by the confidence in prediction for that class
-                        # Since we only account for the Diag
-                        param.grad2 += prob[:, y].float().mean().detach().cpu() * \
-                            param.grad.data.pow(2)
-                model.to(device)
 
-        model.zero_grad()
-        model.to('cpu')
-        # Copy of the model having Diag(hessian) with respect to the given dataloader
-        model_hessian = deepcopy(model)
 
-        # Averaging the Compute Diag with the size of the Dataloader
-
-        for param_hess, param in zip(model_hessian.parameters(), model.parameters()):
-            param.grad2 /= len(dataloader)
-            # the parameters of the model_hessian have hessian stored
-            param_hess.data = param.grad2
-
-        print('Finished Computing Hessian Diagonal')
-
-        return model_hessian
+          return model_hessian
+        
 
     @staticmethod
     def test(model, dataloader, device):
