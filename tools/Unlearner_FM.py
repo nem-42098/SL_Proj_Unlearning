@@ -2,6 +2,7 @@ from copy import deepcopy
 from tqdm import tqdm
 import torch.nn as nn
 import torch
+from torch.nn.functional import softmax
 from torch.nn import Module
 from torch.nn import CrossEntropyLoss, Softmax
 from torch.utils.data import DataLoader
@@ -266,8 +267,7 @@ class Unlearner_FM(Module):
             model = model.to(device)
             output = model(data)
             # Convert to prob
-            soft_max = Softmax(dim=1)
-            prob = soft_max(output)
+            prob = softmax(output, dim=1)
 
             # Contribution of the paramters gradients wrt to each class computed sequentially weight by the
             # confidence in prediction
