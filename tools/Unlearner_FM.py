@@ -1,10 +1,9 @@
 from copy import deepcopy
-from tqdm import tqdm
 import torch.nn as nn
 import torch
 from torch.nn.functional import softmax
 from torch.nn import Module
-from torch.nn import CrossEntropyLoss, Softmax
+from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
 from itertools import chain
 import numpy as np
@@ -151,26 +150,23 @@ class Unlearner_FM(Module):
         named_layers = Unlearner_FM.get_named_layers(self.model)
         state_dict = deepcopy(self.model.state_dict())
 
-        num, idx, temp_idx = 0, 0, []
-        for n, (k, v) in zip(named_layers, state_dict.items()):
-            if n.kind is nn.Conv2d and not n.is_bias:
+        num, idx = 0, 0
+        for layer, (k, v) in zip(named_layers, state_dict.items()):
+            if layer.kind in [nn.Conv2d, nn.Linear] and not layer.is_bias:
                 while idx < len(mask_index) and mask_index[idx] < num + v.size()[0]*v.size()[1]:
                     # get the filter number
                     row = (mask_index[idx] - num) // v.size()[1]
                     # Channel number
                     col = (mask_index[idx] - num) % v.size()[1]
-                    state_dict[k][row, col, :, :] = 0.0
+                    
+                    if layer.kind is nn.Conv2d:
+                        state_dict[k][row, col, :, :] = 0.0
+                    elif layer.kind is nn.Linear:
+                        state_dict[k][row, col] = 0.0
                     idx += 1
                 if num < len(count):
                     num += v.size()[0]*v.size()[1]
-            if n.kind is nn.Linear and not n.is_bias:
-                while idx < len(mask_index) and mask_index[idx] < num + v.size()[0]*v.size()[1]:
-                    row = (mask_index[idx] - num) // v.size()[1]
-                    col = (mask_index[idx] - num) % v.size()[1]
-                    state_dict[k][row, col] = 0.0
-                    idx += 1
-                if num < len(count):
-                    num += v.size()[0]*v.size()[1]
+
         assert num == len(count)
         new_model = deepcopy(self.model)
         new_model.load_state_dict(state_dict)
