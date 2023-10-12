@@ -378,15 +378,16 @@ class Unlearner_FM(Module):
 
             loss_epoch /= (i + 1)
 
-            ### Check for early stopping: if the decrease in the loss is less than 1e-3 for straight 5 iterations
-            epoch_log.append(loss_epoch)
+            
             if epoch > 0:
                 if (epoch_log[-1] - loss_epoch) < 1e-3:
                     stop_counter += 1
 
                 else:
                     stop_counter = 0
-
+            ### Check for early stopping: if the decrease in the loss is less than 1e-3 for straight 5 iterations
+            epoch_log.append(loss_epoch)
+            
             if stop_counter == 5:
 
                 break
