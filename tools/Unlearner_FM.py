@@ -51,6 +51,8 @@ class Unlearner_FM(Module):
         self.forget_hess = None
         # logging fine tuning performance
         self.log = []
+        
+        self.model.to(device)
 
     @staticmethod
     def get_named_layers(net, is_state_dict=True):
@@ -175,7 +177,8 @@ class Unlearner_FM(Module):
         # Model in eval mode:
         model.eval()
         hessian = deepcopy(model)
-        hessian.apply(nn.init.zeros_)
+        for d2_dx2 in hessian.parameters():
+            d2_dx2.data = torch.zeros_like(d2_dx2)
 
         # Criterion of the Loss
         criterion = CrossEntropyLoss(reduction='mean')
@@ -215,6 +218,7 @@ class Unlearner_FM(Module):
 
     @staticmethod
     def test(model, dataloader, device):
+        model.to(device)
         tp, n = 0, 0
         for X, y in dataloader:
             X, y = X.to(device), y.to(device)
