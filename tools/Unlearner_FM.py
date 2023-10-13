@@ -93,6 +93,40 @@ class Unlearner_FM(Module):
             hess.load_state_dict(hess_state_dict)
 
         return hess
+    
+    def compute_importances(self, named_layers, compare_diff = False):
+        importances = []    # List of importances values
+        param_mask  = []    # List of Tensors: difference btween hessians
+        
+        for layer, hessian_f, hessian_ret in zip(named_layers, self.forget_hess.parameters(), self.retain_hess.parameters()):
+
+            if layer.is_bias or layer.kind not in [nn.Conv2d, nn.Linear]:
+                param_mask.append(None)
+                continue
+            
+            # Difference between the hessian diff between the two dataloader. Hessain expectation gives us FIM(fisher Information matrix)
+            if compare_diff:
+                fisher_diff = hessian_f - hessian_ret
+            else:
+                fisher_diff = hessian_f
+
+            if layer.kind is nn.Conv2d:
+                # total number of parameters in the kernel
+                kernel_size = fisher_diff.size(-1)*fisher_diff.size(-2)
+
+                # Average contributions of fisher information by the kernel channels
+                fisher_diff = fisher_diff.sum(dim=[-1, -2])/kernel_size
+
+            # 1D flatten
+            fisher_importances = fisher_diff.view(-1).cpu().detach().numpy().tolist()
+            
+            param_mask.append(fisher_diff)
+            importances += fisher_importances
+                
+        
+
+        return param_mask, importances
+        
 
     def Fisher_Masking(self, retain_loader: DataLoader, forget_loader: DataLoader, forget_hess_path: str, retain_hess_path: str):
         # get the named layers
@@ -103,56 +137,40 @@ class Unlearner_FM(Module):
         self.forget_hess = self.load_hessian(forget_hess_path, forget_loader)
 
         # Keeping count of Masked Parameters
-        importances = []
-        param_mask = []
+
 
         # We will cover two cases of unlearning: Retain Data Available and Not
         # get Hessain wrt to Retain dataloader
         if retain_loader is not None:
-            self.retain_hess = self.load_hessian(
-                retain_hess_path, retain_loader)
+            self.retain_hess = self.load_hessian(retain_hess_path, retain_loader)
         else:
             # placeholder
             self.retain_hess = self.forget_hess
-
-        for layer, hessian_f, hessian_ret in zip(named_layers, self.forget_hess.parameters(), self.retain_hess.parameters()):
-
-            if not layer.is_bias and layer.kind in [nn.Conv2d, nn.Linear]:
-                # Difference between the hessian diff between the two dataloader. Hessain expectation gives us FIM(fisher Information matrix)
-                if retain_loader is not None:
-                    fisher_diff = hessian_f - hessian_ret
-                else:
-                    fisher_diff = hessian_f
-
-                if layer.kind is nn.Conv2d:
-                    # total number of parameters in the kernel
-                    kernel_size = fisher_diff.size(-1)*fisher_diff.size(-2)
-
-                    # Average contributions of fisher information by the kernel channels
-                    fisher_diff = fisher_diff.sum(dim=[-1, -2])/kernel_size
-
-                # 1D flatten
-                fisher_importances = fisher_diff.view(-1).cpu().detach().numpy().tolist()
-                
-                param_mask.append(fisher_diff)
-                importances += fisher_importances
+            
+        
+        masks, importances = self.compute_importances(named_layers, compare_diff=retain_loader is not None)
+        n_params = len(importances)
 
         # Get the cutoff point
-        importance_cutoff = np.quantile(importances, 1-self.removal)
+        print(f'Total Number of Kernels and Neurons:{n_params}, Number of masked Paramters:{int(n_params*self.removal)}')
+        new_model = self.change_params(masks, importances, named_layers)
 
-        print('Total Number of Kernels and Neurons:{}, Number of masked Paramters:{}'.format(
-            len(importances), int(len(importances)*self.removal)))
-
-
+        return new_model, -1, n_params
+    
+    def change_params(self, masks, importances, named_layers) -> nn.Module:
+        """Masking of params"""
         new_model = deepcopy(self.model)
-
-        for layer, param, H in zip(named_layers, new_model.parameters(), importances):
+        
+        importance_cutoff = np.quantile(importances, 1-self.removal)
+         
+        for layer, param, H in zip(named_layers, new_model.parameters(), masks):
             if layer.kind in [nn.Conv2d, nn.Linear] and not layer.is_bias:
                 mask = H < importance_cutoff
                 
                 param.data = param * mask
                 
-        return new_model, -1, len(importances)
+        return new_model
+                
 
     @staticmethod
     def Hessian(dataloader: DataLoader, model: Module, device: str) -> nn.Module:
