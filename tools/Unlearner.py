@@ -8,7 +8,7 @@ from .Custom_Loss import ReconstructionLoss
 
 
 class Unlearner:
-    def __init__(self, model: Module, device: str = 'cuda', lr: float = 1e-6, alpha: float = 1):
+    def __init__(self, model: Module, output_size : int = 10, device: str = 'cuda', lr: float = 1e-6, alpha: float = 1):
         self.og_model = model
         self.device = device
         self.lr = lr
@@ -20,7 +20,7 @@ class Unlearner:
         self.criterion = ReconstructionLoss(alpha=self.alpha)
         self.optimizer = None
         
-        self.distr = torch.distributions.dirichlet.Dirichlet(torch.tensor([1.]*10))
+        self.distr = torch.distributions.dirichlet.Dirichlet(torch.tensor([1.]*output_size))
 
     def unlearn(self, retain_set: DataLoader, forget_set: DataLoader, forget_epochs: int = 10, retrain_epochs: int = 4) -> Module:
         # Create stochastic network, completely at random
