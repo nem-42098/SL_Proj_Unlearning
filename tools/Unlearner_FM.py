@@ -138,7 +138,7 @@ class Unlearner_FM(Module):
                 importances += fisher_importances
 
         # Get the cutoff point
-        importance_cutoff = np.quantile(importances, self.removal)
+        importance_cutoff = np.quantile(importances, 1-self.removal)
 
         print('Total Number of Kernels and Neurons:{}, Number of masked Paramters:{}'.format(
             len(importances), int(len(importances)*self.removal)))
