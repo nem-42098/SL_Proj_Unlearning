@@ -201,20 +201,19 @@ class Unlearner_FM(Module):
 
         # Model in eval mode:
         model.eval()
+        hessian = [torch.zeros(param.data.size(), device=device) for param in model.parameters() if param.requires_grad]
 
         # Criterion of the Loss
         criterion = CrossEntropyLoss(reduction='mean')
 
-        # Creating a attribute for the model paramters which store the the second order derivative
-        for param in model.parameters():
-            param.grad2 = 0
+        
+                
 
         # Iterating over the dataloader
         for _, (data, targets) in enumerate(dataloader):
             data, targets = data.to(device), targets.to(device)
 
             # logits from the model
-            model = model.to(device)
             output = model(data)
             # Convert to prob
             prob = softmax(output, dim=1)
@@ -226,33 +225,22 @@ class Unlearner_FM(Module):
                 loss = criterion(prob, class_target)
 
                 model.zero_grad()
-                loss.backward(retain_graph=True)
-                model.to('cpu')
-                for param in model.parameters():
+                loss_grads = grad(loss, model.parameters(), create_graph=True)
 
-                    # those paramters only which required gradinet
-                    if param.requires_grad:
-                        # weighted by the confidence in prediction for that class
-                        # Since we only account for the Diag
-                        param.grad2 += prob[:, y].float().mean().detach().cpu() * \
-                            param.grad.data.pow(2)
-                model.to(device)
+                with torch.no_grad():
+                    for grd, d2_dx2 in zip(loss_grads, hessian):
+                        d2_dx2.data += grd.pow(2) # * prob[:, y].mean() 
 
         model.zero_grad()
-        model.to('cpu')
-        # Copy of the model having Diag(hessian) with respect to the given dataloader
-        model_hessian = deepcopy(model)
 
-        # Averaging the COmpute Diag with the size of the Dataloader
+        # Averaging the Compute Diag with the size of the Dataloader
 
-        for param_hess, param in zip(model_hessian.parameters(), model.parameters()):
-            param.grad2 /= len(dataloader)
-            # the parameters of the model_hessian have hessian stored
-            param_hess.data = param.grad2
+        for d2_dx2 in hessian:
+            d2_dx2.data /= len(dataloader)
 
         print('Finished Computing Hessian Diagonal')
 
-        return model_hessian
+        return hessian
 
     @staticmethod
     def test(model, dataloader, device):
