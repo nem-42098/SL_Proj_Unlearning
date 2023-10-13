@@ -9,7 +9,8 @@ from itertools import chain
 import numpy as np
 import os
 from typing import Type
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from torch.autograd import grad
 
 
 @dataclass(frozen=True)
@@ -29,7 +30,7 @@ class Layer:
             self.is_running_var + self.is_num_batches_tracked <= 1
         # assert self.kind in ['Conv2d', 'ConvT2d', 'BatchNorm2D', 'Linear']
 
-    def replace(self, **kw) -> Layer:
+    def replace(self, **kw):
         return replace(self, **kw)
 
 
