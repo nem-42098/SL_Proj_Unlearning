@@ -137,16 +137,14 @@ class Unlearner_FM(Module):
                 param_mask.append(fisher_diff)
                 importances += fisher_importances
 
-        mask_index = mask_index[-int(len(count)*self.removal):]
+        # Get the cutoff point
+        importance_cutoff = np.quantile(importances, self.removal)
 
         print('Total Number of Kernels and Neurons:{}, Number of masked Paramters:{}'.format(
-            len(count), int(len(count)*self.removal)))
+            len(importances), int(len(importances)*self.removal)))
 
-        # sorting the index of the param in ascending order'
-        mask_index.sort()
 
-        named_layers = Unlearner_FM.get_named_layers(self.model)
-        state_dict = deepcopy(self.model.state_dict())
+        new_model = deepcopy(self.model)
 
         num, idx = 0, 0
         for layer, (k, v) in zip(named_layers, state_dict.items()):
