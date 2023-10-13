@@ -166,6 +166,10 @@ class Unlearner_FM(Module):
         for layer, param, H in zip(named_layers, new_model.parameters(), masks):
             if layer.kind in [nn.Conv2d, nn.Linear] and not layer.is_bias:
                 mask = H < importance_cutoff
+                for _ in range(param.ndim - mask.ndim):
+                # Need to adjust mask to full param size 
+                    mask = mask.unsqueeze(-1)
+                mask = mask.expand(param.size())
                 
                 param.data = param * mask
                 
