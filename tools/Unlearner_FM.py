@@ -113,7 +113,7 @@ class Unlearner_FM(Module):
             # placeholder
             self.retain_hess = self.forget_hess
 
-        for layer, (_, hessian_f), (_, hessian_ret) in zip(named_layers, self.forget_hess.named_parameters(), self.retain_hess.named_parameters()):
+        for layer, hessian_f, hessian_ret in zip(named_layers, self.forget_hess.parameters(), self.retain_hess.parameters()):
 
             if not layer.is_bias and layer.kind in [nn.Conv2d, nn.Linear]:
                 # Difference between the hessian diff between the two dataloader. Hessain expectation gives us FIM(fisher Information matrix)
@@ -153,7 +153,7 @@ class Unlearner_FM(Module):
         return new_model, -1, len(importances)
 
     @staticmethod
-    def Hessian(dataloader: DataLoader, model: Module, device: str):
+    def Hessian(dataloader: DataLoader, model: Module, device: str) -> nn.Module:
         """""
           Compute the Diagonal of the Hessian Matrix for the given Dataloader. 
           Note: In the implementation of the Diagonal of the Hessian Matrix we have weighted the second order derivatives by the 
@@ -174,7 +174,8 @@ class Unlearner_FM(Module):
 
         # Model in eval mode:
         model.eval()
-        hessian = [torch.zeros(param.data.size(), device=device) for param in model.parameters() if param.requires_grad]
+        hessian = deepcopy(model)
+        hessian.apply(nn.init.zeros_)
 
         # Criterion of the Loss
         criterion = CrossEntropyLoss(reduction='mean')
@@ -198,14 +199,14 @@ class Unlearner_FM(Module):
                 loss_grads = grad(loss, model.parameters(), create_graph=True)
 
                 with torch.no_grad():
-                    for grd, d2_dx2 in zip(loss_grads, hessian):
+                    for grd, d2_dx2 in zip(loss_grads, hessian.parameters()):
                         d2_dx2.data += grd.pow(2) # * prob[:, y].mean() 
 
         model.zero_grad()
 
         # Averaging the Compute Diag with the size of the Dataloader
 
-        for d2_dx2 in hessian:
+        for d2_dx2 in hessian.parameters():
             d2_dx2.data /= len(dataloader)
 
         print('Finished Computing Hessian Diagonal')
