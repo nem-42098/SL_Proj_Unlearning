@@ -146,28 +146,13 @@ class Unlearner_FM(Module):
 
         new_model = deepcopy(self.model)
 
-        num, idx = 0, 0
-        for layer, (k, v) in zip(named_layers, state_dict.items()):
+        for layer, param, H in zip(named_layers, new_model.parameters(), importances):
             if layer.kind in [nn.Conv2d, nn.Linear] and not layer.is_bias:
-                while idx < len(mask_index) and mask_index[idx] < num + v.size()[0]*v.size()[1]:
-                    # get the filter number
-                    row = (mask_index[idx] - num) // v.size()[1]
-                    # Channel number
-                    col = (mask_index[idx] - num) % v.size()[1]
-
-                    if layer.kind is nn.Conv2d:
-                        state_dict[k][row, col, :, :] = 0.0
-                    elif layer.kind is nn.Linear:
-                        state_dict[k][row, col] = 0.0
-                    idx += 1
-                if num < len(count):
-                    num += v.size()[0]*v.size()[1]
-
-        assert num == len(count)
-        new_model = deepcopy(self.model)
-        new_model.load_state_dict(state_dict)
-        new_model.cuda()
-        return new_model, mask_index, len(count)
+                mask = H < importance_cutoff
+                
+                param.data = param * mask
+                
+        return new_model, -1, len(importances)
 
     @staticmethod
     def Hessian(dataloader: DataLoader, model: Module, device: str):
