@@ -103,7 +103,8 @@ class Unlearner_FM(Module):
         self.forget_hess = self.load_hessian(forget_hess_path, forget_loader)
 
         # Keeping count of Masked Parameters
-        count = []
+        importances = []
+        param_mask = []
 
         # We will cover two cases of unlearning: Retain Data Available and Not
         # get Hessain wrt to Retain dataloader
@@ -114,35 +115,27 @@ class Unlearner_FM(Module):
             # placeholder
             self.retain_hess = self.forget_hess
 
-        for layer, (_, param1), (_, param2) in zip(named_layers, self.forget_hess.named_parameters(), self.retain_hess.named_parameters()):
+        for layer, (_, hessian_f), (_, hessian_ret) in zip(named_layers, self.forget_hess.named_parameters(), self.retain_hess.named_parameters()):
 
             if not layer.is_bias and layer.kind in [nn.Conv2d, nn.Linear]:
                 # Difference between the hessian diff between the two dataloader. Hessain expectation gives us FIM(fisher Information matrix)
-
-                fisher_diff = param1.data
                 if retain_loader is not None:
-                    fisher_diff -= param2.data
+                    fisher_diff = hessian_f - hessian_ret
+                else:
+                    fisher_diff = hessian_f
 
                 if layer.kind is nn.Conv2d:
                     # total number of parameters in the kernel
-                    total_size = fisher_diff.size()[-1]*fisher_diff.size()[-2]
+                    kernel_size = fisher_diff.size(-1)*fisher_diff.size(-2)
 
                     # Average contributions of fisher information by the kernel channels
-                    fisher_diff = torch.sum(
-                        fisher_diff, dim=[-1, -2])/total_size
+                    fisher_diff = fisher_diff.sum(dim=[-1, -2])/kernel_size
 
                 # 1D flatten
-                fisher_diff = fisher_diff.view(-1).cpu().detach().numpy()
-
-                count.append(fisher_diff)
-
-        # Converting the list of list tp => list
-        count = list(chain.from_iterable(count))
-
-        mask_index = np.argsort(np.array(count))
-
-        # Getting the index of the kernels channels for Convolution layers or param in Linear layer which have
-        # high contribution on the forget dataset and less on retrain dataset
+                fisher_importances = fisher_diff.view(-1).cpu().detach().numpy().tolist()
+                
+                param_mask.append(fisher_diff)
+                importances += fisher_importances
 
         mask_index = mask_index[-int(len(count)*self.removal):]
 
