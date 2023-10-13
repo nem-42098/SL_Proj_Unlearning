@@ -63,7 +63,6 @@ class Unlearner_FM(Module):
         # recursive iteration : [More efficeint than using mutiple model.named_children for loops]
         for mod in net.modules():
             if type(mod) not in [nn.Linear, nn.Conv2d, nn.ConvTranspose2d, nn.BatchNorm2d]:
-                print(type(mod))
                 continue
 
             if hasattr(mod, 'in_channels') and hasattr(mod, 'out_channels'):
@@ -75,7 +74,7 @@ class Unlearner_FM(Module):
             if hasattr(mod, 'bias') and mod.bias is not None:
                 named_layers.append(param.replace(is_bias=True))
 
-            if is_state_dict:
+            if isinstance(mod, nn.BatchNorm2d) and is_state_dict:
                 named_layers.append(param.replace(is_running_var=True))
                 named_layers.append(param.replace(is_num_batches_tracked=True))
                 named_layers.append(param.replace(is_running_mean=True))
