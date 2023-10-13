@@ -5,7 +5,6 @@ from torch.nn.functional import softmax
 from torch.nn import Module
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
-from itertools import chain
 import numpy as np
 import os
 from typing import Type
@@ -38,7 +37,7 @@ class Unlearner_FM(Module):
 
     def __init__(self, Removal_Ratio: float, Pretrained_Model: Module, lr: float = 1e-3, device: str = 'cuda',):
         super(Unlearner_FM, self).__init__()
-        # Removal Ratio of the paramters in the network
+        # Removal Ratio of the paramters in the network [0,1]
         self.removal = Removal_Ratio
         # Pretrain_model
         self.model = Pretrained_Model
@@ -94,7 +93,6 @@ class Unlearner_FM(Module):
         return hess
 
     def Fisher_Masking(self, retain_loader: DataLoader, forget_loader: DataLoader, forget_hess_path: str, retain_hess_path: str):
-
         # get the named layers
         named_layers = Unlearner_FM.get_named_layers(
             self.model, is_state_dict=False)
@@ -172,7 +170,6 @@ class Unlearner_FM(Module):
                 Remember while doing batch gradinet we approximate the gradient.
 
         """""
-        
         model = model.to(device)
 
         # Model in eval mode:
@@ -181,9 +178,6 @@ class Unlearner_FM(Module):
 
         # Criterion of the Loss
         criterion = CrossEntropyLoss(reduction='mean')
-
-        
-                
 
         # Iterating over the dataloader
         for _, (data, targets) in enumerate(dataloader):
@@ -233,12 +227,13 @@ class Unlearner_FM(Module):
         return tp/n
 
     def fine_tune(self, model, dataloader, epochs: int = 5):
-
         # intialising the optimiser
         optimizer = torch.optim.Adam(
             model.parameters(), lr=self.lr, weight_decay=0.01)
         # early stopping counter
         stop_counter = 0
+        model = model.to(self.device)
+
         # criterion
         criterion = CrossEntropyLoss()
 
@@ -252,15 +247,10 @@ class Unlearner_FM(Module):
             loss_epoch = 0
 
             for i, (inputs, targets) in enumerate(dataloader):
-
                 # GPU push
                 inputs, targets = inputs.to(
                     self.device), targets.to(self.device)
 
-                if next(model.parameters()).is_cuda:
-                    print("Model is on CUDA (GPU)")
-                else:
-                    model = model.to(self.device)
 
                 # predictions from the model
                 y_pred = model(inputs)
