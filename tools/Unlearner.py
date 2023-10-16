@@ -8,6 +8,8 @@ from .Custom_Loss import ReconstructionLoss
 
 
 class Unlearner:
+    """https://arxiv.org/abs/2308.14322
+    """
     def __init__(self, model: Module, device: str = 'cuda', lr: float = 1e-6, alpha: float = 1):
         self.og_model = model
         self.device = device

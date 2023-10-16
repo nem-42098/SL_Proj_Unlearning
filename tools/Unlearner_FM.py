@@ -7,30 +7,8 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
 import numpy as np
 import os
-from typing import Type
-from dataclasses import dataclass, replace
 from torch.autograd import grad
-
-
-@dataclass(frozen=True)
-class Layer:
-    """Keep information about a layer"""
-    kind: Type
-    in_channels: int
-    out_channels: int
-    idx: int = 0
-    is_bias: bool = False
-    is_running_mean: bool = False
-    is_running_var: bool = False
-    is_num_batches_tracked: bool = False
-
-    def __post_init__(self):
-        assert self.is_bias + self.is_running_mean + \
-            self.is_running_var + self.is_num_batches_tracked <= 1
-        # assert self.kind in ['Conv2d', 'ConvT2d', 'BatchNorm2D', 'Linear']
-
-    def replace(self, **kw):
-        return replace(self, **kw)
+from .Layer import Layer
 
 
 class Unlearner_FM(Module):
@@ -94,7 +72,7 @@ class Unlearner_FM(Module):
 
         return hess
     
-    def compute_importances(self, named_layers, compare_diff = False):
+    def compute_importances(self, named_layers: list, compare_diff : bool = False) -> (list, list):
         importances = []    # List of importances values
         param_mask  = []    # List of Tensors: difference btween hessians
         
@@ -123,21 +101,16 @@ class Unlearner_FM(Module):
             param_mask.append(fisher_diff)
             importances += fisher_importances
                 
-        
-
         return param_mask, importances
         
 
-    def Fisher_Masking(self, retain_loader: DataLoader, forget_loader: DataLoader, forget_hess_path: str, retain_hess_path: str):
+    def Fisher_Masking(self, retain_loader: DataLoader, forget_loader: DataLoader, forget_hess_path: str, retain_hess_path: str) -> nn.Module:
         # get the named layers
         named_layers = Unlearner_FM.get_named_layers(
             self.model, is_state_dict=False)
 
         # Only need to compute hessian once for given class removal
         self.forget_hess = self.load_hessian(forget_hess_path, forget_loader)
-
-        # Keeping count of Masked Parameters
-
 
         # We will cover two cases of unlearning: Retain Data Available and Not
         # get Hessain wrt to Retain dataloader
@@ -225,7 +198,7 @@ class Unlearner_FM(Module):
 
                 with torch.no_grad():
                     for grd, d2_dx2 in zip(loss_grads, hessian.parameters()):
-                        d2_dx2.data += grd.pow(2) # * prob[:, y].mean() 
+                        d2_dx2.data += grd.pow(2) * prob[:, y].mean() 
 
         model.zero_grad()
 

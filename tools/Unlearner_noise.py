@@ -5,17 +5,27 @@ from torch.nn import Module
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from.Unlearner import Unlearner
-def reset_batch_norm(layer: nn.Module):
-    if isinstance(layer, nn.BatchNorm2d):
-        layer.reset_parameters()
+
 
 class NoisyUnlearner(Unlearner):
-    def unlearn(self, retain_set: DataLoader, forget_set: DataLoader, retrain_epochs: int = 4, nu : float = 1.) -> Module:
+    def unlearn(self, retain_set: DataLoader, forget_set: DataLoader = None, retrain_epochs: int = 4, nu : float = 1.) -> Module:
+        """Applies the unlearning through an impair step in which gaussian noise (mean=0, std=nu) is added to the
+        model parameters, and then some retraining
+
+        Args:
+            retain_set (DataLoader): _description_
+            forget_set (DataLoader, optional): Unused, here for compatibility reasons.
+            retrain_epochs (int, optional): _description_. Defaults to 4.
+            nu (float, optional): Standard deviation of the gaussian noise. Defaults to 1..
+
+        Returns:
+            Module: the new model which should've forgotten the old samples
+        """
         self.og_model.eval()
         student = deepcopy(self.og_model)
         student.train()
 
-        student.apply(reset_batch_norm)
+        student.apply(NoisyUnlearner.reset_batch_norm)
         
         # Impair step
         for param in student.parameters():
@@ -31,5 +41,10 @@ class NoisyUnlearner(Unlearner):
             
         self.retrained_model = student
         return self.retrained_model
+    
+    @staticmethod
+    def reset_batch_norm(layer: nn.Module):
+        if isinstance(layer, nn.BatchNorm2d):
+            layer.reset_parameters()
 
 
