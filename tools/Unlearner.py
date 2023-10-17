@@ -29,25 +29,32 @@ class Unlearner:
         # self.dumb_model = self.reset_weights(self.og_model)
 
         self.og_model.eval()
-        student = deepcopy(self.og_model)
-        student.train()
-        self.optimizer = torch.optim.Adam(student.parameters(), lr=self.lr)
         
-        for e in tqdm(range(forget_epochs)):
-            # Erasure
-            self.knowledge_transfer(student, None, False, forget_set, e)
-            # Retrain
-            """
-            self.knowledge_transfer(student, self.og_model, True, retain_set, e)
-            """
-            
-        self.erased_model = deepcopy(student)
-        for e in tqdm(range(retrain_epochs)):
-            # Retrain
-            self.knowledge_transfer(student, self.og_model, True, retain_set, e+forget_epochs)
-            
-        self.retrained_model = student
+        self.erased_model = self.impair(self.og_model, forget_set, forget_epochs)
+        self.retrained_model = self.recover(self.erased_model, retain_set, retrain_epochs)
+
         return self.retrained_model
+    
+    def impair(self, model:nn.Module, forget_set:DataLoader, epochs:int) -> nn.Module:
+        impaired = deepcopy(model)
+        impaired.train()
+        self.optimizer = torch.optim.Adam(impaired.parameters(), lr=self.lr)
+        for e in tqdm(range(epochs)):
+            # Erasure
+            self.knowledge_transfer(impaired, None, False, forget_set, e)
+            
+        return impaired
+    
+    def recover(self, model:nn.Module, retain_set:DataLoader, epochs:int) -> nn.Module:
+        recovering =  deepcopy(model)
+        recovering.train()
+        self.optimizer = torch.optim.Adam(recovering.parameters(), lr=self.lr)
+        
+        for e in tqdm(range(epochs)):
+            # Retrain
+            self.knowledge_transfer(recovering, self.og_model, True, retain_set, e)
+        return recovering
+            
 
     def knowledge_transfer(self,
             student: Module, teacher: Module,
