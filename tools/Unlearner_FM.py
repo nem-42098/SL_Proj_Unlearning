@@ -185,20 +185,15 @@ class Unlearner_FM(Module):
             # logits from the model
             output = model(data)
             # Convert to prob
-            prob = softmax(output, dim=1)
+            # prob = softmax(output, dim=1)
+            loss = criterion(output, targets)
 
-            # Contribution of the paramters gradients wrt to each class computed sequentially weight by the
-            # confidence in prediction
-            for y in range(output.shape[1]):
-                class_target = torch.empty_like(targets).fill_(y)
-                loss = criterion(prob, class_target)
+            model.zero_grad()
+            loss_grads = grad(loss, model.parameters(), create_graph=True)
 
-                model.zero_grad()
-                loss_grads = grad(loss, model.parameters(), create_graph=True)
-
-                with torch.no_grad():
-                    for grd, d2_dx2 in zip(loss_grads, hessian.parameters()):
-                        d2_dx2.data += grd.pow(2) * prob[:, y].mean() 
+            with torch.no_grad():
+                for grd, d2_dx2 in zip(loss_grads, hessian.parameters()):
+                    d2_dx2.data += grd.pow(2) #* prob[:, y].mean() 
 
         model.zero_grad()
 
@@ -255,7 +250,7 @@ class Unlearner_FM(Module):
                 # predictions from the model
                 y_pred = model(inputs)
 
-                self.optimizer.zero_grad()
+                optimizer.zero_grad()
 
                 # Calculate the Loss
 
@@ -266,26 +261,26 @@ class Unlearner_FM(Module):
                 # Update the weights
                 optimizer.step()
                 # Logging the measures
-                self.log_performance(y_pred, targets, loss.item(
-                ), epoch, i, phase='Training_forget_model')
+                # self.log_performance(y_pred, targets, loss.item(
+                # ), epoch, i, phase='Training_forget_model')
 
-                # Train-set loss
-                loss_epoch += loss.item()
+                # # Train-set loss
+                # loss_epoch += loss.item()
 
-            loss_epoch /= (i + 1)
+            # loss_epoch /= (i + 1)
 
-            # Check for early stopping: if the decrease in the loss is less than 1e-3 for straight 5 iterations
-            epoch_log.append(loss_epoch)
-            if epoch > 0:
-                if (self.epoch_log[-1] - loss_epoch) < 1e-3:
-                    stop_counter += 1
+            # # Check for early stopping: if the decrease in the loss is less than 1e-3 for straight 5 iterations
+            # epoch_log.append(loss_epoch)
+            # if epoch > 0:
+            #     if (self.epoch_log[-1] - loss_epoch) < 1e-3:
+            #         stop_counter += 1
 
-                else:
-                    stop_counter = 0
+            #     else:
+            #         stop_counter = 0
 
-            if stop_counter == 5:
+            # if stop_counter == 5:
 
-                break
+            #     break
 
         return model, epoch_log
 
