@@ -16,23 +16,23 @@ class Unlearner_SDD(Unlearner_FM):
         new_model = deepcopy(self.model)
         
         importances = np.array(importances)
+        importances = np.nan_to_num(importances)
         
         importance_cutoff = np.quantile(importances, 1-self.removal)
-        params = np.concatenate([H.detach().cpu().numpy().flatten() for H in masks if H is not None])
-        assert importances.shape == params.shape, f'{importances.shape}, {params.shape}'
-        beta = self.lamda * np.min(params/importances)
-        print(beta)
         
-            
-        for layer, param, H in zip(named_layers, new_model.parameters(), masks):
-            if layer.kind in [nn.Conv2d, nn.Linear] and not layer.is_bias:
-                mask = H > importance_cutoff
-                for _ in range(param.ndim - mask.ndim):
-                # Need to adjust mask to full param size 
-                    mask = mask.unsqueeze(-1)
-                mask = mask.expand(param.size())
-                
-                param.data = param * (~mask + mask*beta)
+        with torch.no_grad():
+            for layer, param, H in zip(named_layers, new_model.parameters(), masks):
+                if layer.kind in [nn.Conv2d, nn.Linear] and not layer.is_bias:
+                    mask = H > importance_cutoff
+                    dampening = mask * H * self.lamda
+                    dampening = dampening.clamp(max=1) + ~mask
+                    print('Unchanged params:', (dampening==1).float().mean().item() )
+                    for _ in range(param.ndim - dampening.ndim):
+                    # Need to adjust mask to full param size 
+                        dampening = dampening.unsqueeze(-1)
+                    dampening = dampening.expand(param.size())
+
+                    param.data = param * dampening
                 
         return new_model
     
