@@ -156,12 +156,12 @@ class Unlearner_SGN(Module):
                           ### damp mask
 
                           damp=deepcopy(ratio)
-                          damp[damp<self.alpha]=0
+                          damp[damp>=(1/self.alpha)]=0
 
                           ### undampened_param_mask
                           undamp=deepcopy(ratio)
-                          undamp[undamp>=self.alpha]=0
-                          undamp[undamp<self.alpha]=1
+                          undamp[undamp<(1/self.alpha)]=0
+                          undamp[undamp>=(1/self.alpha)]=1
 
                           Count_damp.append(damp)
                           Count_undamp.append(undamp)
@@ -190,12 +190,12 @@ class Unlearner_SGN(Module):
                           ### damp mask
 
                           damp=deepcopy(ratio)
-                          damp[damp<self.alpha]=0
+                          damp[damp>(1/self.alpha)]=0
 
                           ### undampened_param_mask
                           undamp=deepcopy(ratio)
-                          undamp[undamp<self.alpha]=1
-                          undamp[undamp>=self.alpha]=0
+                          undamp[undamp<(1/self.alpha)]=0
+                          undamp[undamp>=(1/self.alpha)]=1
 
 
                           Count_damp.append(damp)
@@ -264,16 +264,17 @@ class Unlearner_SGN(Module):
                     # if num < len(Count):
                     #     num += v.size()[0]*v.size()[1]
                     ### Dampening the parameters(following the threshold)
-                    a=((state_dict[k].T.cpu())*Count_damp[idx].T).T
-                    size=a.size()[-1]*a.size()[-2]
-                    a_damp=torch.sum(a,dim=[-1,-2])/size
-                    ### Cheking the condition min(ratio,1)==>1 for conv is sum of the possible modified kernel param.So if kernel and specific
-                    ### channel the avg is greater than 1. I divide by the average. Making them all ones is like a Pool filter. To me it does not
-                    ### makes much sense.
-                    unaffec_mask=deepcopy(a_damp)
-                    # unaffec_mask[unaffec_mask<1]=1
-                    unaffec_mask[unaffec_mask>1]=-1
-                    Count_damp[idx]=np.reciprocal(Count_damp[idx],where=unaffec_mask==-1)
+                    # a=((state_dict[k].T.cpu())*Count_damp[idx].T).T
+                    # size=a.size()[-1]*a.size()[-2]
+                    # a_damp=torch.sum(a,dim=[-1,-2])/size
+                    # ### Cheking the condition min(ratio,1)==>1 for conv is sum of the possible modified kernel param.So if kernel and specific
+                    # ### channel the avg is greater than 1. I divide by the average. Making them all ones is like a Pool filter. To me it does not
+                    # ### makes much sense.
+                    # unaffec_mask=deepcopy(a_damp)
+                    # # unaffec_mask[unaffec_mask<1]=1
+                    # unaffec_mask[unaffec_mask>1]=-1
+                    # Count_damp[idx]=np.reciprocal(Count_damp[idx],where=unaffec_mask==-1)
+                    # print(Count_damp)
                     ### Final Modification of the selected parameters
                     a=((state_dict[k].T.cpu())*Count_damp[idx].T).T
 
@@ -293,13 +294,13 @@ class Unlearner_SGN(Module):
                     # if num < len(Count):
                     #     num += v.size()[0]*v.size()[1]
 
-                    ### Dampening the parameters(following the threshold)
-                    a_damp=((state_dict[k].T.cpu())*Count_damp[idx].T).T
-                    ### Cheking the condition min(ratio,1)
-                    unaffec_mask=deepcopy(a_damp)
-                    unaffec_mask[unaffec_mask<1]=1
-                    unaffec_mask[unaffec_mask>1]=0
-                    Count_damp[idx]=np.reciprocal(Count_damp[idx],where=unaffec_mask==-1)                    ### Final Modification of the selected parameters
+                    # ### Dampening the parameters(following the threshold)
+                    # a_damp=((state_dict[k].T.cpu())*Count_damp[idx].T).T
+                    # ### Cheking the condition min(ratio,1)
+                    # unaffec_mask=deepcopy(a_damp)
+                    # # unaffec_mask[unaffec_mask<1]=1
+                    # unaffec_mask[unaffec_mask>1]=-1
+                    # Count_damp[idx]=np.reciprocal(Count_damp[idx],where=unaffec_mask==-1)                    ### Final Modification of the selected parameters
                     a=((state_dict[k].T.cpu())*Count_damp[idx].T).T
 
                     ### Unaffected parameters
@@ -415,7 +416,7 @@ class Unlearner_SGN(Module):
     def fine_tune(self,model,dataloader,epochs:int=10):
 
         ### intialising the optimiser
-        optimizer = torch.optim.Adam(model.parameters(), lr=self.lr,weight_decay=0.01)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4,weight_decay=0.01)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
         ### early stopping counter
         stop_counter = 0
@@ -451,6 +452,8 @@ class Unlearner_SGN(Module):
                 ### predictions from the model
                 y_pred = model(inputs)
 
+                # print(y_pred)
+
                 optimizer.zero_grad()
 
                 ###Calculate the Loss
@@ -466,6 +469,8 @@ class Unlearner_SGN(Module):
 
                 #### Train-set loss
                 loss_epoch += loss.item()
+
+                # print(loss_epoch)
 
             loss_epoch /= (i + 1)
 
