@@ -10,13 +10,11 @@ import numpy as np
 from tqdm import tqdm as tq
 
 
-class Unlearner_FM(Module):
+class Unlearner_SGN(Module):
 
-    def __init__(self,Removal_Ratio:float,Pretrained_Model:Module,alpha:float=10,lr:float=1e-3,device:str='cuda',):
-            super(Unlearner_FM, self).__init__()
-        
-            ### Removal Ratio of the paramters in the network  
-            self.removal=Removal_Ratio
+    def __init__(self,alpha:float,Pretrained_Model:Module,lr:float=1e-3,device:str='cuda',):
+            super(Unlearner_SGN, self).__init__()
+    
 
             ### Pretrain_model
             self.model=Pretrained_Model
@@ -94,7 +92,7 @@ class Unlearner_FM(Module):
     def Fisher_Masking(self,retain_dataloader:DataLoader,forget_dataloader:DataLoader,forget_hess_path:str,retain_hess_path:str):
           
             ### get the named layers
-            named_layers=Unlearner_FM.get_named_layers(self.model,is_state_dict=False)
+            named_layers=Unlearner_SGN.get_named_layers(self.model,is_state_dict=False)
 
 
             ### Only need to compute hessian once for given class removal
@@ -104,7 +102,7 @@ class Unlearner_FM(Module):
                 self.forget_hess=deepcopy(self.model)
                 self.forget_hess.load_state_dict(forget_hess_state_dict)
             except:
-                 self.forget_hess=Unlearner_FM.Hessian(forget_dataloader,self.model,self.device)
+                 self.forget_hess=Unlearner_SGN.Hessian(forget_dataloader,self.model,self.device)
                  torch.save(self.forget_hess.state_dict(),forget_hess_path)
 
             ### Keeping count of Masked Parameters
@@ -124,10 +122,10 @@ class Unlearner_FM(Module):
                 
                 except:
                      
-                     self.retain_hess=Unlearner_FM.Hessian(retain_dataloader,self.model,self.device)
+                     self.retain_hess=Unlearner_SGN.Hessian(retain_dataloader,self.model,self.device)
                      torch.save(self.retain_hess.state_dict(),retain_hess_path)
 
-
+                damp_param_count=0
                 for layer,(k1,param1),(k2,param2) in zip(named_layers,self.forget_hess.named_parameters(),self.retain_hess.named_parameters()):
                      
                     if layer.startswith('Conv2d') and not layer.endswith('bias'):
@@ -153,7 +151,7 @@ class Unlearner_FM(Module):
 
                           fisher_forget=torch.sum(param1.data,dim=[-1,-2])/size
 
-                          ratio=(fisher_forget/fisher_retain).cpu().detach().numpy()
+                          ratio=torch.where(fisher_forget!=0,(fisher_retain/fisher_forget),torch.zeros_like(fisher_retain)).cpu().detach().numpy()
                           
                           ### damp mask
 
@@ -163,9 +161,12 @@ class Unlearner_FM(Module):
                           ### undampened_param_mask
                           undamp=deepcopy(ratio)
                           undamp[undamp>=self.alpha]=0
+                          undamp[undamp<self.alpha]=1
 
                           Count_damp.append(damp)
                           Count_undamp.append(undamp)
+                          
+                          damp_param_count+=np.sum(damp!=0)
                     
                     elif layer.startswith('Linear') and not layer.endswith('bias'):
                          
@@ -185,7 +186,7 @@ class Unlearner_FM(Module):
 
                           fisher_forget=param1.data
 
-                          ratio=(fisher_retain/fisher_forget).cpu().detach().numpy()
+                          ratio=torch.where(fisher_forget!=0,(fisher_retain/fisher_forget),torch.zeros_like(fisher_retain)).cpu().detach().numpy()
                           ### damp mask
 
                           damp=deepcopy(ratio)
@@ -199,6 +200,10 @@ class Unlearner_FM(Module):
 
                           Count_damp.append(damp)
                           Count_undamp.append(undamp)
+
+                          damp_param_count+=np.sum(damp!=0)
+                print(damp_param_count)
+                      
 
             else:
                         pass
@@ -244,7 +249,7 @@ class Unlearner_FM(Module):
            
 
             
-            named_layers=Unlearner_FM.get_named_layers(self.model)
+            named_layers=Unlearner_SGN.get_named_layers(self.model)
             state_dict=deepcopy(self.model.state_dict())
 
 
@@ -259,21 +264,21 @@ class Unlearner_FM(Module):
                     # if num < len(Count):
                     #     num += v.size()[0]*v.size()[1]
                     ### Dampening the parameters(following the threshold)
-                    a=((state_dict[k].T)*Count_damp[idx]).T
+                    a=((state_dict[k].T.cpu())*Count_damp[idx].T).T
                     size=a.size()[-1]*a.size()[-2]
                     a_damp=torch.sum(a,dim=[-1,-2])/size
                     ### Cheking the condition min(ratio,1)==>1 for conv is sum of the possible modified kernel param.So if kernel and specific
                     ### channel the avg is greater than 1. I divide by the average. Making them all ones is like a Pool filter. To me it does not
                     ### makes much sense.
                     unaffec_mask=deepcopy(a_damp)
-                    unaffec_mask[unaffec_mask<1]=1
-                    unaffec_mask[unaffec_mask>1]=0
-                    Count_damp[idx][tuple(np.argwhere(unaffec_mask==0).T)]=(1/a_damp[tuple(np.argwhere(unaffec_mask==0).T)])
+                    # unaffec_mask[unaffec_mask<1]=1
+                    unaffec_mask[unaffec_mask>1]=-1
+                    Count_damp[idx]=np.reciprocal(Count_damp[idx],where=unaffec_mask==-1)
                     ### Final Modification of the selected parameters
-                    a=((state_dict[k].T)*Count_damp[idx]).T
+                    a=((state_dict[k].T.cpu())*Count_damp[idx].T).T
 
                     ### Unaffected parameters
-                    b=((state_dict[k].T)*Count_undamp[idx]).T
+                    b=((state_dict[k].T.cpu())*Count_undamp[idx].T).T
                     
 
                     state_dict[k]= a+b
@@ -289,17 +294,16 @@ class Unlearner_FM(Module):
                     #     num += v.size()[0]*v.size()[1]
 
                     ### Dampening the parameters(following the threshold)
-                    a_damp=((state_dict[k].T)*Count_damp[idx]).T
+                    a_damp=((state_dict[k].T.cpu())*Count_damp[idx].T).T
                     ### Cheking the condition min(ratio,1)
                     unaffec_mask=deepcopy(a_damp)
                     unaffec_mask[unaffec_mask<1]=1
                     unaffec_mask[unaffec_mask>1]=0
-                    Count_damp[idx][tuple(np.argwhere(unaffec_mask==0).T)]=(1/a_damp[tuple(np.argwhere(unaffec_mask==0).T)])
-                    ### Final Modification of the selected parameters
-                    a=((state_dict[k].T)*Count_damp[idx]).T
+                    Count_damp[idx]=np.reciprocal(Count_damp[idx],where=unaffec_mask==-1)                    ### Final Modification of the selected parameters
+                    a=((state_dict[k].T.cpu())*Count_damp[idx].T).T
 
                     ### Unaffected parameters
-                    b=((state_dict[k].T)*Count_undamp[idx]).T
+                    b=((state_dict[k].T.cpu())*Count_undamp[idx].T).T
                     
 
                     state_dict[k]= a+b
@@ -394,6 +398,7 @@ class Unlearner_FM(Module):
         
     @staticmethod 
     def test(model, dataloader,device):
+        model.eval()
         tp, n = 0,0
         for X,y in dataloader:
             X,y = X.to(device), y.to(device)
@@ -411,6 +416,7 @@ class Unlearner_FM(Module):
 
         ### intialising the optimiser
         optimizer = torch.optim.Adam(model.parameters(), lr=self.lr,weight_decay=0.01)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
         ### early stopping counter
         stop_counter = 0
         ## criterion
@@ -419,7 +425,7 @@ class Unlearner_FM(Module):
         ### Epoch Log of losses
         epoch_log=[]
         
-
+        model.train()
         ###Iterations
         for epoch in tq(range(epochs)):
             ### iterate over the forget_dataloader
