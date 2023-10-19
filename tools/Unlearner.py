@@ -8,50 +8,38 @@ from .Custom_Loss import ReconstructionLoss
 
 
 class Unlearner:
-    def __init__(self, model: Module, device: str = 'cuda', lr: float = 1e-6, alpha: float = 1):
+    def __init__(self, model: Module, output_size : int = 10, device: str = 'cuda', lr: float = 1e-6, alpha: float = 1):
         self.og_model = model
         self.device = device
         self.lr = lr
         self.alpha = alpha
         self.log = []
-        self.dumb_model = None
+        self.dumb_model = None # Unused
         self.erased_model = None
         self.retrained_model = None
         self.criterion = ReconstructionLoss(alpha=self.alpha)
         self.optimizer = None
         
-        self.distr = torch.distributions.dirichlet.Dirichlet(torch.tensor([1.]*10))
+        self.distr = torch.distributions.dirichlet.Dirichlet(torch.tensor([1.]*output_size))
 
     def unlearn(self, retain_set: DataLoader, forget_set: DataLoader, forget_epochs: int = 10, retrain_epochs: int = 4) -> Module:
         # Create stochastic network, completely at random
-        self.dumb_model = self.reset_weights(self.og_model)
+        # self.dumb_model = self.reset_weights(self.og_model)
 
-        # # Erase knowledge about forget set from original model
-        # print('Erasing information from original model...')
-        # self.erased_model = self.knowledge_transfer(
-        #     self.og_model, self.dumb_model,
-        #     include_target=False,
-        #     trainset=forget_set,
-        #     epochs=forget_epochs)
-
-        # # Retrain erased model on remaning set
-        # print('Retraining on the retrain set...')
-        # self.retrained_model = self.knowledge_transfer(
-        #     self.erased_model, self.og_model,
-        #     include_target=True,
-        #     trainset=retain_set,
-        #     epochs=retrain_epochs)
         self.og_model.eval()
-        self.dumb_model.eval()
         student = deepcopy(self.og_model)
         student.train()
         self.optimizer = torch.optim.Adam(student.parameters(), lr=self.lr)
         
         for e in tqdm(range(forget_epochs)):
             # Erasure
-            self.knowledge_transfer(student, self.dumb_model, False, forget_set, e)
+            self.knowledge_transfer(student, None, False, forget_set, e)
             # Retrain
+            """
             self.knowledge_transfer(student, self.og_model, True, retain_set, e)
+            """
+            
+        self.erased_model = deepcopy(student)
         for e in tqdm(range(retrain_epochs)):
             # Retrain
             self.knowledge_transfer(student, self.og_model, True, retain_set, e+forget_epochs)
@@ -70,11 +58,10 @@ class Unlearner:
 
             y_pred = student(inputs)
 
-            with torch.no_grad():
-                y_teach = teacher(inputs)
-
             self.optimizer.zero_grad()
             if include_target:
+                with torch.no_grad():
+                    y_teach = teacher(inputs)
                 # in case of retraining
                 loss = self.criterion(y_pred, y_teach, targets)
             else:
