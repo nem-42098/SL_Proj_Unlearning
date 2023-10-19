@@ -10,10 +10,10 @@ import numpy as np
 from tqdm import tqdm as tq
 
 
-class Unlearner_SGN(Module):
+class Unlearner_SGN_Noise(Module):
 
     def __init__(self,alpha:float,Pretrained_Model:Module,lr:float=1e-3,device:str='cuda',):
-            super(Unlearner_SGN, self).__init__()
+            super(Unlearner_SGN_Noise, self).__init__()
     
 
             ### Pretrain_model
@@ -92,7 +92,7 @@ class Unlearner_SGN(Module):
     def Fisher_Masking(self,retain_dataloader:DataLoader,forget_dataloader:DataLoader,forget_hess_path:str,retain_hess_path:str):
           
             ### get the named layers
-            named_layers=Unlearner_SGN.get_named_layers(self.model,is_state_dict=False)
+            named_layers=Unlearner_SGN_Noise.get_named_layers(self.model,is_state_dict=False)
 
 
             ### Only need to compute hessian once for given class removal
@@ -102,7 +102,7 @@ class Unlearner_SGN(Module):
                 self.forget_hess=deepcopy(self.model)
                 self.forget_hess.load_state_dict(forget_hess_state_dict)
             except:
-                 self.forget_hess=Unlearner_SGN.Hessian(forget_dataloader,self.model,self.device)
+                 self.forget_hess=Unlearner_SGN_Noise.Hessian(forget_dataloader,self.model,self.device)
                  torch.save(self.forget_hess.state_dict(),forget_hess_path)
 
             ### Keeping count of Masked Parameters
@@ -122,7 +122,7 @@ class Unlearner_SGN(Module):
                 
                 except:
                      
-                     self.retain_hess=Unlearner_SGN.Hessian(retain_dataloader,self.model,self.device)
+                     self.retain_hess=Unlearner_SGN_Noise.Hessian(retain_dataloader,self.model,self.device)
                      torch.save(self.retain_hess.state_dict(),retain_hess_path)
 
                 damp_param_count=0
@@ -233,7 +233,7 @@ class Unlearner_SGN(Module):
            
 
             
-            named_layers=Unlearner_SGN.get_named_layers(self.model)
+            named_layers=Unlearner_SGN_Noise.get_named_layers(self.model)
             state_dict=deepcopy(self.model.state_dict())
 
 
