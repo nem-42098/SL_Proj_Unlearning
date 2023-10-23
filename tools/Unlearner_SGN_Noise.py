@@ -10,10 +10,10 @@ import numpy as np
 from tqdm import tqdm as tq
 
 
-class Unlearner_SGN(Module):
+class Unlearner_SGN_Noise(Module):
 
     def __init__(self,alpha:float,Pretrained_Model:Module,lr:float=1e-3,device:str='cuda',):
-            super(Unlearner_SGN, self).__init__()
+            super(Unlearner_SGN_Noise, self).__init__()
     
 
             ### Pretrain_model
@@ -92,7 +92,7 @@ class Unlearner_SGN(Module):
     def Fisher_Masking(self,retain_dataloader:DataLoader,forget_dataloader:DataLoader,forget_hess_path:str,retain_hess_path:str):
           
             ### get the named layers
-            named_layers=Unlearner_SGN.get_named_layers(self.model,is_state_dict=False)
+            named_layers=Unlearner_SGN_Noise.get_named_layers(self.model,is_state_dict=False)
 
 
             ### Only need to compute hessian once for given class removal
@@ -102,7 +102,7 @@ class Unlearner_SGN(Module):
                 self.forget_hess=deepcopy(self.model)
                 self.forget_hess.load_state_dict(forget_hess_state_dict)
             except:
-                 self.forget_hess=Unlearner_SGN.Hessian(forget_dataloader,self.model,self.device)
+                 self.forget_hess=Unlearner_SGN_Noise.Hessian(forget_dataloader,self.model,self.device)
                  torch.save(self.forget_hess.state_dict(),forget_hess_path)
 
             ### Keeping count of Masked Parameters
@@ -122,26 +122,13 @@ class Unlearner_SGN(Module):
                 
                 except:
                      
-                     self.retain_hess=Unlearner_SGN.Hessian(retain_dataloader,self.model,self.device)
+                     self.retain_hess=Unlearner_SGN_Noise.Hessian(retain_dataloader,self.model,self.device)
                      torch.save(self.retain_hess.state_dict(),retain_hess_path)
 
                 damp_param_count=0
                 for layer,(k1,param1),(k2,param2) in zip(named_layers,self.forget_hess.named_parameters(),self.retain_hess.named_parameters()):
                      
                     if layer.startswith('Conv2d') and not layer.endswith('bias'):
-                          ### Difference between the hessian diff between the two dataloader. Hessain expectation gives us FIM(fisher Information matrix)
-
-                        #   fisher_diff=param1.data-param2.data 
-
-                        #   total_size=fisher_diff.size()[-1]*fisher_diff.size()[-2] ## total number of parameters in the kernel
-
-                        #   ### Average contributions of fisher information by the kernel channels
-                        #   fisher_diff=torch.sum(fisher_diff,dim=[-1,-2])/total_size
-
-                        #   ### 1D flatten
-                        #   fisher_diff=fisher_diff.view(-1).cpu().detach().numpy()
-
-                        #   Count.append(fisher_diff)
 
 
                           #### Fisher Diagonal for the retain dataset
@@ -157,7 +144,10 @@ class Unlearner_SGN(Module):
 
                           damp=deepcopy(ratio)
                           damp[damp>=(1/self.alpha)]=0
+                          
 
+                          ### Create Random Noise using samples drawn from N
+                          damp[damp!=0]=torch.normal(0,damp[damp!=0])
                           ### undampened_param_mask
                           undamp=deepcopy(ratio)
                           undamp[undamp<(1/self.alpha)]=0
@@ -169,15 +159,6 @@ class Unlearner_SGN(Module):
                           damp_param_count+=np.sum(damp!=0)
                     
                     elif layer.startswith('Linear') and not layer.endswith('bias'):
-                         
-                        #   ### Difference between the hessian diff between the two dataloader. Hessain expectation gives us FIM(fisher Information matrix)
-
-                        #   fisher_diff=param1.data-param2.data 
-
-                        #   ### 1D flatten
-                        #   fisher_diff=fisher_diff.view(-1).cpu().detach().numpy()
-
-                        #   Count.append(fisher_diff)
 
                          #### Fisher Diagonal for the retain dataset
                           size=param2.data.size()[-1]*param2.data.size()[-2]
@@ -191,6 +172,9 @@ class Unlearner_SGN(Module):
 
                           damp=deepcopy(ratio)
                           damp[damp>(1/self.alpha)]=0
+
+                          ### Create Random Noise using samples drawn from N
+                          damp[damp!=0]=torch.normal(0,damp[damp!=0])
 
                           ### undampened_param_mask
                           undamp=deepcopy(ratio)
@@ -249,34 +233,15 @@ class Unlearner_SGN(Module):
            
 
             
-            named_layers=Unlearner_SGN.get_named_layers(self.model)
+            named_layers=Unlearner_SGN_Noise.get_named_layers(self.model)
             state_dict=deepcopy(self.model.state_dict())
 
 
             num, idx, temp_idx = 0, 0, []
             for n, (k, v) in zip(named_layers, state_dict.items()):
                 if n.startswith('Conv2d') and not n.endswith('bias'):
-                    # while idx < len(mask_index) and mask_index[idx] < num + v.size()[0]*v.size()[1]:
-                    #     row = (mask_index[idx] - num) // v.size()[1] #### get the filter number
-                    #     col = (mask_index[idx] - num) % v.size()[1]### Channel number
-                    #     state_dict[k][row, col, :, :] = 0.0
-                    #     idx += 1
-                    # if num < len(Count):
-                    #     num += v.size()[0]*v.size()[1]
-                    ### Dampening the parameters(following the threshold)
-                    # a=((state_dict[k].T.cpu())*Count_damp[idx].T).T
-                    # size=a.size()[-1]*a.size()[-2]
-                    # a_damp=torch.sum(a,dim=[-1,-2])/size
-                    # ### Cheking the condition min(ratio,1)==>1 for conv is sum of the possible modified kernel param.So if kernel and specific
-                    # ### channel the avg is greater than 1. I divide by the average. Making them all ones is like a Pool filter. To me it does not
-                    # ### makes much sense.
-                    # unaffec_mask=deepcopy(a_damp)
-                    # # unaffec_mask[unaffec_mask<1]=1
-                    # unaffec_mask[unaffec_mask>1]=-1
-                    # Count_damp[idx]=np.reciprocal(Count_damp[idx],where=unaffec_mask==-1)
-                    # print(Count_damp)
-                    ### Final Modification of the selected parameters
-                    a=((state_dict[k].T.cpu())*Count_damp[idx].T).T
+ 
+                    a=((state_dict[k].T.cpu())*Count_damp[idx].T).T+state_dict[k].cpu()
 
                     ### Unaffected parameters
                     b=((state_dict[k].T.cpu())*Count_undamp[idx].T).T
@@ -286,22 +251,8 @@ class Unlearner_SGN(Module):
 
                     idx+=1
                 if n.startswith('Linear') and not n.endswith('bias'):
-                    # while idx < len(mask_index) and mask_index[idx] < num + v.size()[0]*v.size()[1]:
-                    #     row = (mask_index[idx] - num) // v.size()[1]
-                    #     col = (mask_index[idx] - num) % v.size()[1]
-                    #     state_dict[k][row, col] = 0.0
-                    #     idx += 1
-                    # if num < len(Count):
-                    #     num += v.size()[0]*v.size()[1]
-
-                    # ### Dampening the parameters(following the threshold)
-                    # a_damp=((state_dict[k].T.cpu())*Count_damp[idx].T).T
-                    # ### Cheking the condition min(ratio,1)
-                    # unaffec_mask=deepcopy(a_damp)
-                    # # unaffec_mask[unaffec_mask<1]=1
-                    # unaffec_mask[unaffec_mask>1]=-1
-                    # Count_damp[idx]=np.reciprocal(Count_damp[idx],where=unaffec_mask==-1)                    ### Final Modification of the selected parameters
-                    a=((state_dict[k].T.cpu())*Count_damp[idx].T).T
+                 ### Final Modification of the selected parameters
+                    a=((state_dict[k].T.cpu())*Count_damp[idx].T).T+state_dict[k].cpu()
 
                     ### Unaffected parameters
                     b=((state_dict[k].T.cpu())*Count_undamp[idx].T).T
