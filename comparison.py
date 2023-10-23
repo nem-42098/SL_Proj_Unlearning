@@ -91,7 +91,7 @@ dictionary containing accuracy on forget, retrain subsets and the
 time of execution
 """
 
-def metrics(data,model,classes):
+def metrics(data,model,classes, output_size):
 
   device=torch.device('cuda')
 # Train and test datasets, and train and set dataloaders for both CIFAR10 and CIFAR100 datasets.
@@ -105,7 +105,7 @@ def metrics(data,model,classes):
   model=model.to(device)
 
   # Initialize Unlearning Class
-  unlearner = Unlearner(model, lr = 1e-2, alpha=1)
+  unlearner = Unlearner(model, output_size,lr = 1e-2, alpha=1)
 
   # Measure training time
   start_time = time.time()
