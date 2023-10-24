@@ -252,60 +252,42 @@ class Unlearner_FM(Module):
                         model=model.to(device)
 
           ### Model in eval mode:
+          # Model in eval mode:
           model.eval()
+          hessian = deepcopy(model)
+          for d2_dx2 in hessian.parameters():
+              d2_dx2.data = torch.zeros_like(d2_dx2)
 
-          ### Criterion of the Loss
-          criterion=CrossEntropyLoss(reduction='mean')
-       
-          ### Creating a attribute for the model paramters which store the the second order derivative
-          for param in model.parameters():
-                param.grad2=0
-        
-          ### Iterating over the dataloader
-          for _,(data,targets) in enumerate(dataloader):
-                data,targets=data.to(device),targets.to(device)
+          # Criterion of the Loss
+          criterion = CrossEntropyLoss(reduction='mean')
 
-                ### logits from the model
-                model=model.to(device)
-                output=model(data)
-                ### Convert to prob
-                soft_max=Softmax(dim=1)
-                prob=soft_max(output)
-                
-                ## Contribution of the paramters gradients wrt to each class computed sequentially weight by the
-                ## confidence in prediction
-                for y in range(output.shape[1]):
-                      class_target=torch.empty_like(targets).fill_(y)
-                      loss=criterion(prob,class_target)
-                      
-                      model.zero_grad()
-                      loss.backward(retain_graph=True)
-                      model.to('cpu')
-                      for param in model.parameters():
-                            
-                            ### those paramters only which required gradinet
-                            if param.requires_grad:
-                                ### weighted by the confidence in prediction for that class
-                                param.grad2+=prob[:,y].float().mean().detach().cpu()*param.grad.data.pow(2) ### Since we only account for the Diag
-                      model.to(device)
+          # Iterating over the dataloader
+          for _, (data, targets) in enumerate(dataloader):
+              data, targets = data.to(device), targets.to(device)
+
+              # logits from the model
+              output = model(data)
+              # Convert to prob
+              # prob = softmax(output, dim=1)
+              loss = criterion(output, targets)
+
+              model.zero_grad()
+              loss_grads = grad(loss, model.parameters(), create_graph=True)
+
+              with torch.no_grad():
+                  for grd, d2_dx2 in zip(loss_grads, hessian.parameters()):
+                      d2_dx2.data += grd.pow(2) #* prob[:, y].mean() 
 
           model.zero_grad()
-          model.to('cpu')
-          ### Copy of the model having Diag(hessian) with respect to the given dataloader
-          model_hessian=deepcopy(model)
 
-          ### Averaging the COmpute Diag with the size of the Dataloader
+          # Averaging the Compute Diag with the size of the Dataloader
 
-          for param_hess,param in zip(model_hessian.parameters(),model.parameters()):
-                param.grad2 /= len(dataloader)
-                ## the parameters of the model_hessian have hessian stored
-                param_hess.data=param.grad2
+          for d2_dx2 in hessian.parameters():
+              d2_dx2.data /= len(dataloader)
 
           print('Finished Computing Hessian Diagonal')
 
-
-
-          return model_hessian
+          return hessian
         
     @staticmethod 
     def test(model, dataloader,device):
