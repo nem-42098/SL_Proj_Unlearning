@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from itertools import chain
 import numpy as np
 from tqdm import tqdm as tq
+from torch.autograd import grad
 
 
 class Unlearner_FM(Module):
