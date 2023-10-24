@@ -309,6 +309,7 @@ class Unlearner_FM(Module):
         
     @staticmethod 
     def test(model, dataloader,device):
+        model.eval()
         tp, n = 0,0
         for X,y in dataloader:
             X,y = X.to(device), y.to(device)
