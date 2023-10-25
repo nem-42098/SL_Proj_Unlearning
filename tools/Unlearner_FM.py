@@ -306,10 +306,10 @@ class Unlearner_FM(Module):
         return tp/n
     
     
-    def fine_tune(self,model,dataloader,epochs:int=10):
+    def fine_tune(self,model,dataloader,epochs:int=10,weight_decay=0.01):
 
         ### intialising the optimiser
-        optimizer = torch.optim.Adam(model.parameters(), lr=self.lr,weight_decay=0.01)
+        optimizer = torch.optim.Adam(model.parameters(), lr=self.lr,weight_decay=weight_decay)
         ### early stopping counter
         stop_counter = 0
         ## criterion
@@ -363,6 +363,7 @@ class Unlearner_FM(Module):
             loss_epoch /= (i + 1)
 
             
+
             if epoch > 0:
                 if (epoch_log[-1] - loss_epoch) < 1e-3:
                     stop_counter += 1
