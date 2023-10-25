@@ -394,10 +394,10 @@ class Unlearner_SGN(Module):
         return tp/n
     
     
-    def fine_tune(self,model,dataloader,epochs:int=10):
+    def fine_tune(self,model,dataloader,epochs:int=10,weight_decay=0.01):
 
         ### intialising the optimiser
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4,weight_decay=0.01)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-6,weight_decay=weight_decay)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
         ### early stopping counter
         stop_counter = 0
@@ -455,7 +455,7 @@ class Unlearner_SGN(Module):
 
             loss_epoch /= (i + 1)
 
-            
+            scheduler.step()
             if epoch > 0:
                 if (epoch_log[-1] - loss_epoch) < 1e-3:
                     stop_counter += 1
