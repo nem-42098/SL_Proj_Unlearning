@@ -4,9 +4,13 @@ This project explores various techniques for machine unlearning, which refers to
 The methods evaluated in this study include:
 
 -Finetuning
+
 -Random Perturbation Unlearning
+
 -Stochastic Teacher Network
+
 -Fisher Masking
+
 -Selective Synaptic Dampening
 
 The performance of these techniques is assessed on metrics such as retained set accuracy, forgotten set accuracy, and computational complexity. The project provides insights into the strengths and limitations of each method, aiming to contribute to the growing field of machine unlearning.
