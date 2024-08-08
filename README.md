@@ -1,4 +1,4 @@
-# Final Project for Statistical Learning in Msc. Data Science program
+# Final Project for Statistical Learning in Msc. Data Science, Sapienza University of Rome.
 
 This project explores various techniques for machine unlearning, which refers to the process of removing the influence of a subset of training data from a machine learning model. The goal is to align the performance of the unlearned model with a model retrained from scratch on the remaining data, without compromising the model's performance on the retained data.
 The methods evaluated in this study include:
